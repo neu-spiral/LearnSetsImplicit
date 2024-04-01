@@ -52,7 +52,7 @@ class SetBindingDB(object):
         V_size, S_size = self.params.v_size, self.params.s_size
         self.dataset = load_bindingdb(self.params)
 
-        data_root = '/root/dataset/bindingdb'
+        data_root = './root/dataset/bindingdb'
         data_path = os.path.join(data_root, 'bindingdb_set_data.pkl')
         if os.path.exists(data_path):
             print(f'load data from {data_path}')
@@ -144,7 +144,7 @@ class SetDataset(Dataset):
         return len(self.V_idxs)
 
 def load_bindingdb(params):
-    data = DTI(name = 'BindingDB_Kd', path='/root/dataset/bindingdb')
+    data = DTI(name = 'BindingDB_Kd', path='./root/dataset/bindingdb')
     data.harmonize_affinities(mode = 'mean')
     return data.get_data()
 

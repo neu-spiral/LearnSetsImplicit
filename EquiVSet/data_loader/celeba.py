@@ -18,7 +18,7 @@ img_transform = transforms.Compose([
     transforms.Normalize(mean=[0.5, 0.5, 0.5],
                           std=[0.5, 0.5, 0.5])
 ])
-img_root_path = '/root/dataset/celeba/img_align_celeba/'
+img_root_path = './root/dataset/celeba/img_align_celeba/'
 
 class Data:
     def __init__(self, params):
@@ -43,7 +43,7 @@ class CelebA(Data):
     def download_celeba(self):
         url_img = 'https://drive.google.com/uc?id=1iBJh4vHuE9h-eMOqVis94QccxCT_LPFW'
         url_anno = 'https://drive.google.com/uc?id=1p0-TEiW4HgT8MblB399ep4YM3u5A0Edc'
-        data_root = 'root/dataset/celeba'
+        data_root = './root/dataset/celeba'
         download_path_img = f'{data_root}/img_align_celeba.zip'
         download_path_anno = f'{data_root}/list_attr_celeba.txt'
         if not os.path.exists(data_root):
@@ -192,7 +192,7 @@ def collate_val_and_test(data):
 
 def load_img(img_id):
     img_id = str(img_id + 1)    # 0 -> 1
-    img_path =  img_root_path + ( '0' * (6 - len(img_id)) ) + img_id + '.jpg'
+    img_path = img_root_path + ('0' * (6 - len(img_id))) + img_id + '.jpg'
     img = Image.open(img_path).convert('RGB')
     img = img_transform(img).unsqueeze(0)
     return img

@@ -22,7 +22,7 @@ class SetPDBBind(object):
         V_size, S_size = self.params.v_size, self.params.s_size
         self.dataset = load_pdbbind(self.params)
 
-        data_root = '/root/dataset/pdbbind'
+        data_root = './root/dataset/pdbbind'
         data_path = os.path.join(data_root, 'pdbbind_set_data.pkl')
         if os.path.exists(data_path):
             print(f'load data from {data_path}')
