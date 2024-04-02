@@ -50,7 +50,7 @@ class EquiVSet(Base_Model):
     def get_model_specific_argparser():
         parser = Base_Model.get_general_argparser()
 
-        parser.add_argument('--mode', type=str, default='copula',
+        parser.add_argument('--mode', type=str, default='diffMF',
                             choices=['diffMF', 'ind', 'copula'],
                             help='name of the variant model [%(default)s]')
         parser.add_argument('--RNN_steps', type=int, default=1,

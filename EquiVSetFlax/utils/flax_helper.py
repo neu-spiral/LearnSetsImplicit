@@ -1,8 +1,8 @@
 import dgl
 import math
-import torch
+import flax
 import pickle
-import torch.nn as nn
+import flax.linen as nn
 
 
 def set_value_according_index(tensor, idx, value):
@@ -52,8 +52,8 @@ def move_to_device(obj, device):
 
 class FF(nn.Module):
     def __init__(self, dim_input, dim_hidden, dim_output, num_layers,
-                 activation='relu', dropout_rate=0, layer_norm=False,
-                 residual_connection=False):
+                 activation='relu', dropout_rate=0.0, layer_norm=False,
+                 residual_connection=False):  # this probably doesn't need dim_input and dim_hidden as parameters
         super().__init__()
 
         assert num_layers >= 0  # 0 = Linear
@@ -63,26 +63,24 @@ class FF(nn.Module):
             assert dim_hidden == dim_input
 
         self.residual_connection = residual_connection
-        self.stack = nn.ModuleList()
+        self.stack = nn.ModuleList()  # this will just be a list probably
         for l in range(num_layers):
             layer = []
 
             if layer_norm:
-                layer.append(nn.LayerNorm(dim_input if l == 0 else dim_hidden))
+                layer.append(nn.LayerNorm())
 
-            layer.append(nn.Linear(dim_input if l == 0 else dim_hidden,
-                                   dim_hidden))
-            layer.append({'tanh': nn.Tanh(), 'relu': nn.ReLU()}[activation])
+            layer.append(nn.Dense(features=dim_hidden))
+            layer.append({'tanh': nn.Tanh(), 'relu': nn.relu()}[activation])
 
-            if dropout_rate > 0:
+            if dropout_rate > 0.0:
                 layer.append(nn.Dropout(dropout_rate))
 
             self.stack.append(nn.Sequential(*layer))
 
-        self.out = nn.Linear(dim_input if num_layers < 1 else dim_hidden,
-                             dim_output)
+        self.out = nn.Dense(features=dim_output)
 
-    def forward(self, x):
+    def __call__(self, x):
         for layer in self.stack:
             x = x + layer(x) if self.residual_connection else layer(x)
         return self.out(x)

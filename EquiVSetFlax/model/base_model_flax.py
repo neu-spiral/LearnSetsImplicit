@@ -1,16 +1,25 @@
+import argparse
 from typing import Sequence
-
 import numpy as np
+import random
 import jax
 import jax.numpy as jnp
 import flax.linen as nn
+from data_loader import TwoMoons, GaussianMixture, Amazon, CelebA
+from utils.logger import Logger
+from timeit import default_timer as timer
+
+
+class BaseModel(nn.Module):
+    pass
+
 
 class Base_Model(nn.Module):
     @nn.compact
     def __init__(self, hparams):
         super().__init__()
         self.hparams = hparams
-        self.hparams.save_path = self.hparams.root_path + self.hparams.model_name
+        self.hparams.save_path = self.hparams.root_path + "logs/" + self.hparams.model_name
         self.load_data()
 
     def load_data(self):
