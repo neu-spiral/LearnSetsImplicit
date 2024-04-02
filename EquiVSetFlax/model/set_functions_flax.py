@@ -1,10 +1,13 @@
-# import torch
+import sys
+
+# setting path
+sys.path.append('../EquiVSetFlax')
+import jax
 import datetime
-# import torch.nn as nn
-# import torch.nn.functional as F
 import flax
 import flax.linen as nn
 import jax.numpy as jnp
+import numpy as np
 from utils.flax_helper import FF, normal_cdf
 
 
@@ -20,30 +23,58 @@ def fwd_solver(f, psi_init):
     return psi
 
 
+def MC_sampling(q, M):  # we should be able to get rid of this step altogether
+    """
+    Bernoulli sampling using q as parameters.
+    Args:
+        q: parameter of Bernoulli distribution (ψ in the paper)
+        M: number of samples (m in the paper)
+
+    Returns:
+        Sampled subsets F(S+i), F(S)
+
+    """
+    bs, vs = q.shape
+    q = np.broadcast_to(q.reshape(bs, 1, 1, vs), (bs, M, vs, vs))  # .expand(bs, M, vs, vs)
+    # is bs = 1? bs should be the batch size
+    q = jax.device_put(q)
+    sample_matrix = jax.random.bernoulli(jax.random.PRNGKey(758493), q)  # we should have torch uniform outside
+
+    mask = jnp.concatenate([jnp.eye(vs, vs).unsqueeze(0) for _ in range(M)], dim=0).unsqueeze(0)
+    # what does this line do?
+    # after the first unsqueeze we have a 3D tensor with 1 channel, vs rows, and vs columns
+    # after concat we have a 3D tensor with M channels, vs rows, and vs columns
+    # after the second unsqueeze we have a (1, M, vs, vs) shaped tensor
+    matrix_0 = sample_matrix * (1 - mask)  # element_wise multiplication
+    matrix_1 = matrix_0 + mask
+    return matrix_1, matrix_0  # F([x]_+i), F([x]_- i)
+
+
 class SetFunction(nn.Module):  # nn.Module is the base class for all NN modules. Any model should subclass this class.
     """
         Definition of the set function (F_θ) using a NN.
     """
+    params: dict
 
-    def __init__(self, params):
-        super(SetFunction, self).__init__()
-        self.params = params  # params = {v_size: 30,
-        #                                 s_size: 10,
-        #                                 num_layers: 2,
-        #                                 batch_size: 4,
-        #                                 lr: 0.0001,
-        #                                 weight_decay: 1e-5,
-        #                                 init: 0.05,
-        #                                 clip: 10,
-        #                                 epochs: 100,
-        #                                 num_runs: 1,
-        #                                 num_bad_epochs: 6,
-        #                                 num_workers: 2
-        #                                 }
-        self.dim_feature = 256  # dimension of the NN layers
-
-        self.init_layer = self.define_init_layer()  # custom init layers for different setups
-        self.ff = FF(self.dim_feature, 500, 1, self.params.num_layers)  # forward fold
+    # def __init__(self, params):
+    #     super(SetFunction, self).__init__()
+    #     self.params = params  # params = {v_size: 30,
+    #     #                                 s_size: 10,
+    #     #                                 num_layers: 2,
+    #     #                                 batch_size: 4,
+    #     #                                 lr: 0.0001,
+    #     #                                 weight_decay: 1e-5,
+    #     #                                 init: 0.05,
+    #     #                                 clip: 10,
+    #     #                                 epochs: 100,
+    #     #                                 num_runs: 1,
+    #     #                                 num_bad_epochs: 6,
+    #     #                                 num_workers: 2
+    #     #                                 }
+    #     self.dim_feature = 256  # dimension of the NN layers
+    #
+    #     self.init_layer = self.define_init_layer()  # custom init layers for different setups
+    #     self.ff = FF(self.dim_feature, 500, 1, self.params.num_layers)  # forward fold
 
     def define_init_layer(self):
         """
@@ -52,42 +83,19 @@ class SetFunction(nn.Module):  # nn.Module is the base class for all NN modules.
         """
         return nn.Dense(features=self.dim_feature)
 
-    @staticmethod
-    def MC_sampling(q, M):  # we should be able to get rid of this step altogether
-        """
-        Bernoulli sampling using q as parameters.
-        Args:
-            q: parameter of Bernoulli distribution (ψ in the paper)
-            M: number of samples (m in the paper)
-
-        Returns:
-            Sampled subsets F(S+i), F(S)
-
-        """
-        bs, vs = q.shape
-        q = q.reshape(bs, 1, 1, vs).expand(bs, M, vs, vs)  # is bs = 1?
-        sample_matrix = jax.random.bernoulli(q)  # we should have torch uniform outside
-
-        mask = jnp.cat([jnp.eye(vs, vs).unsqueeze(0) for _ in range(M)], dim=0).unsqueeze(0).to(q.device)
-        # what does this line do?
-        # after the first unsqueeze we have a 3D tensor with 1 channel, vs rows, and vs columns
-        # after concat we have a 3D tensor with M channels, vs rows, and vs columns
-        # after the second unsqueeze we have a (1, M, vs, vs) shaped tensor
-        matrix_0 = sample_matrix * (1 - mask)  # element_wise multiplication
-        matrix_1 = matrix_0 + mask
-        return matrix_1, matrix_0  # F([x]_+i), F([x]_- i)
-
     def mean_field_iteration(self, V, subset_i, subset_not_i):  # ψ_i in the paper
         q = jax.nn.sigmoid((self.grad_F_S(V, subset_i, subset_not_i)).mean(1))
         return q
 
-    def forward(self, V, S, neg_S, rec_net):  # return cross-entropy loss
+    def __call__(self, V, S, neg_S, rec_net):  # should be __call__
+        """"returns cross-entropy loss."""
         bs, vs = V.shape[:2]
-        q = .5 * jnp.ones(bs, vs).to(V.device)  # ψ_0 <-- 0.5 * vector(1)
+        q = .5 * jnp.ones((bs, vs))  # ψ_0 <-- 0.5 * vector(1)
+        # q = jax.random.uniform(jax.random.PRNGKey(758493), shape=(bs, vs))
 
-        # for i in range(self.params.RNN_steps):  # MFVI K times where K = RNN_steps
-        #     sample_matrix_1, sample_matrix_0 = self.MC_sampling(q, self.params.num_samples)
-        #     q = self.mean_field_iteration(V, sample_matrix_1, sample_matrix_0)  # ψ
+        for i in range(self.params['RNN_steps']):  # MFVI K times where K = RNN_steps
+            sample_matrix_1, sample_matrix_0 = MC_sampling(q, self.params['num_samples'])
+            q = self.mean_field_iteration(V, sample_matrix_1, sample_matrix_0)  # ψ
 
         # there should be an alternative q definition here using IFT and AutoGrad
         # @partial(jax.custom_vjp, nondiff_argnums=(0, 1))
@@ -113,7 +121,7 @@ class SetFunction(nn.Module):  # nn.Module is the base class for all NN modules.
         #
         # theta = theta - eta * jax.grad(lambda theta: fixed_point_layer(fwd_solver, f, theta, x).sum())(theta)
 
-        loss = self.cross_entropy(q, S, neg_S)
+        loss = self.cross_entropy(q, S, neg_S)  # no need for self.
         return loss
 
     def F_S(self, V, subset_mat, fpi=False):
@@ -127,21 +135,21 @@ class SetFunction(nn.Module):  # nn.Module is the base class for all NN modules.
         fea = self.ff(fea)
         return fea
 
-    def multilinear_relaxation(F_S, y):
-        out = 0.0
-        for i in range(2 ** len(y)):
-            binary_vector = map(int, list(bin(i)[2:]))
-            if len(binary_vector) < len(y):
-                binary_vector = [0] * (len(y) - len(binary_vector)) + binary_vector
-            x = dict(zip(y.iterkeys(), binary_vector))
-            new_term = F_S(x)
-            for key in y:
-                if x[key] == 0:
-                    new_term *= (1.0 - y[key])
-                else:
-                    new_term *= y[key]
-            out += new_term
-        return out
+    # def multilinear_relaxation(F_S, y):
+    #     out = 0.0
+    #     for i in range(2 ** len(y)):
+    #         binary_vector = map(int, list(bin(i)[2:]))
+    #         if len(binary_vector) < len(y):
+    #             binary_vector = [0] * (len(y) - len(binary_vector)) + binary_vector
+    #         x = dict(zip(y.iterkeys(), binary_vector))
+    #         new_term = F_S(x)
+    #         for key in y:
+    #             if x[key] == 0:
+    #                 new_term *= (1.0 - y[key])
+    #             else:
+    #                 new_term *= y[key]
+    #         out += new_term
+    #     return out
 
     def grad_F_S(self, V, subset_i, subset_not_i):
         F_1 = self.F_S(V, subset_i, fpi=True).squeeze(-1)
@@ -156,14 +164,25 @@ class SetFunction(nn.Module):  # nn.Module is the base class for all NN modules.
         F_00 = self.F_S(V, subset_not_ij, fpi=True).squeeze(-1)
         return F_11 - F_10 - F_01 + F_00
 
+
 if __name__ == "__main__":
-    params = {v_size: 30, s_size: 10, num_layers: 2, batch_size: 4, lr: 0.0001, weight_decay: 1e-5, init: 0.05,
-              clip: 10, epochs: 100, num_runs: 1, num_bad_epochs: 6, num_workers: 2}
-    mySet = SetFunction(params)
+    params = {'v_size': 30, 's_size': 10, 'num_layers': 2, 'batch_size': 4, 'lr': 0.0001, 'weight_decay': 1e-5,
+              'init': 0.05, 'clip': 10, 'epochs': 100, 'num_runs': 1, 'num_bad_epochs': 6, 'num_workers': 2,
+              'RNN_steps': 1, 'num_samples': 5}
 
-    subset_i, subset_not_i = mySet.MC_sampling(q, 500)
+    rng = jax.random.PRNGKey(42)
+    rng, V_inp_rng, S_inp_rng, neg_S_inp_rng, rec_net_inp_rng, init_rng = jax.random.split(rng, 6)
+    V_inp = jax.random.normal(V_inp_rng, (2, 3))  # Batch size 4, input size (V) 100
+    S_inp = jax.random.normal(S_inp_rng, (4, 10))  # Batch size 4, input size (V) 10
+    neg_S_inp = jax.random.normal(neg_S_inp_rng, (4, 90))  # Batch size 4, input size (V) 100
+    rec_net_inp = jax.random.normal(rec_net_inp_rng, (4, 1))  # Batch size 4, input size (V) 100
+    # MOONS_CONFIG = {'data_name': 'moons', 'v_size': 100, 's_size': 10, 'batch_size': 128}
+    # x = random.normal(key1, (10,))  # Dummy input data
+    # params = model.init(key2, x)  # Initialization call
+    # jax.tree_util.tree_map(lambda x: x.shape, params)  # Checking output shapes
+    mySetModel = SetFunction(params=params)
+    print(mySetModel)
+    new_params = mySetModel.init(init_rng, V_inp, S_inp, neg_S_inp, rec_net_inp)
+    print(new_params)
 
-    
-
-
-
+    # subset_i, subset_not_i = mySet.MC_sampling(q, 500)

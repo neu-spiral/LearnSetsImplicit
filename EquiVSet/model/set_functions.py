@@ -1,3 +1,6 @@
+import sys
+# setting path
+sys.path.append('../EquiVSet')
 import torch
 import datetime
 import torch.nn as nn
@@ -56,7 +59,10 @@ class SetFunction(nn.Module):  # nn.Module is the base class for all NN modules.
 
         """
         bs, vs = q.shape
+        print(q.shape)
+        print(q.reshape(bs, 1, 1, vs))
         q = q.reshape(bs, 1, 1, vs).expand(bs, M, vs, vs)  # is bs = 1?
+        print(q.shape)
         sample_matrix = torch.bernoulli(q)  # we should have torch uniform outside
 
         mask = torch.cat([torch.eye(vs, vs).unsqueeze(0) for _ in range(M)], dim=0).unsqueeze(0).to(q.device)
@@ -122,6 +128,48 @@ class SetFunction(nn.Module):  # nn.Module is the base class for all NN modules.
         F_11 = self.F_S(V, subset_ij, fpi=True).squeeze(-1)
         F_10 = self.F_S(V, subset_i_not_j, fpi=True).squeeze(-1)
         F_01 = self.F_S(V, subset_j_not_i, fpi=True).squeeze(-1)
-        F_00 = self.F_S(V, subset_not_ij, fpi=True).squeeze(-1)
-        return F_11 - F_10 - F_01 + F_00
+        F_00 = self.F_S(V, subset_not_ij, fpi)
+        pass
+
+
+if __name__ == "__main__":
+    # params = {'v_size': 30, 's_size': 10, 'num_layers': 2, 'batch_size': 4, 'lr': 0.0001, 'weight_decay': 1e-5,
+    #           'init': 0.05, 'clip': 10, 'epochs': 100, 'num_runs': 1, 'num_bad_epochs': 6, 'num_workers': 2,
+    #           'RNN_steps': 1, 'num_samples': 5}
+    #
+    # mySet = SetFunction(params)
+    # def MC_sampling(q, M):  # we should be able to get rid of this step altogether
+    #     """
+    #     Bernoulli sampling using q as parameters.
+    #     Args:
+    #         q: parameter of Bernoulli distribution (ψ in the paper)
+    #         M: number of samples (m in the paper)
+    #
+    #     Returns:
+    #         Sampled subsets F(S+i), F(S)
+    #
+    #     """
+    #     bs, vs = q.shape
+    #     print(q.shape)
+    #     print(q)
+    #     print(q.reshape(bs, 1, 1, vs).shape)
+    #     print(q.reshape(bs, 1, 1, vs))
+    #     q = q.reshape(bs, 1, 1, vs).expand(bs, M, vs, vs)  # is bs = 1?
+    #     print(q.shape)
+    #     print(q)
+    #     sample_matrix = torch.bernoulli(q)  # we should have torch uniform outside
+    #
+    #     mask = torch.cat([torch.eye(vs, vs).unsqueeze(0) for _ in range(M)], dim=0).unsqueeze(0).to(q.device)
+    #     # what does this line do?
+    #     # after the first unsqueeze we have a 3D tensor with 1 channel, vs rows, and vs columns
+    #     # after concat we have a 3D tensor with M channels, vs rows, and vs columns
+    #     # after the second unsqueeze we have a (1, M, vs, vs) shaped tensor
+    #     matrix_0 = sample_matrix * (1 - mask)  # element_wise multiplication
+    #     matrix_1 = matrix_0 + mask
+    #     return matrix_1, matrix_0  # F([x]_+i), F([x]_- i)
+
+    # device = torch.device('cuda:0')
+    # q = .5 * torch.rand(2, 3).to(device)
+    # subset_i, subset_not_i = MC_sampling(q, 4)
+    # print(subset_i)
 

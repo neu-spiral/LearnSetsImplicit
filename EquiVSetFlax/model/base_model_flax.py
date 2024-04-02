@@ -11,6 +11,10 @@ from timeit import default_timer as timer
 
 
 class BaseModel(nn.Module):
+    # act_fn: Callable
+    # num_classes: int = 10
+    # hidden_sizes: Sequence = (512, 256, 256, 128)
+    # kernel_init: Callable = nn.linear.default_kernel_init
     pass
 
 
