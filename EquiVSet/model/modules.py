@@ -79,6 +79,8 @@ class SetFunction(nn.Module):  # nn.Module is the base class for all NN modules.
 
     def forward(self, V, S, neg_S, rec_net):  # return cross-entropy loss
         if self.params.mode == 'diffMF':
+            print(S.shape)
+            print(neg_S.shape)
             bs, vs = V.shape[:2]
             q = .5 * torch.ones(bs, vs).to(V.device)  # ψ_0 <-- 0.5 * vector(1)
         else:
@@ -95,12 +97,16 @@ class SetFunction(nn.Module):  # nn.Module is the base class for all NN modules.
         return loss
 
     def F_S(self, V, subset_mat, fpi=False):
+        # print(V.shape)
+        # print(self.init_layer(V).shape)
         if fpi:
             # to fix point iteration (aka mean-field iteration)
             fea = self.init_layer(V).reshape(subset_mat.shape[0], 1, -1, self.dim_feature)
         else:
             # to encode variational dist
             fea = self.init_layer(V).reshape(subset_mat.shape[0], -1, self.dim_feature)
+        # print(subset_mat.shape)
+        # print(fea.shape)
         fea = subset_mat @ fea
         fea = self.ff(fea)
         return fea

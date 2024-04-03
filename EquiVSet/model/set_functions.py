@@ -1,4 +1,5 @@
 import sys
+
 # setting path
 sys.path.append('../EquiVSet')
 import torch
@@ -12,6 +13,31 @@ from utils.pytorch_helper import FF, normal_cdf
 def cross_entropy(q, S, neg_S):  # Eq. (5) in the paper
     loss = - torch.sum((S * torch.log(q + 1e-12) + (1 - S) * torch.log(1 - q + 1e-12)) * neg_S, dim=-1)
     return loss.mean()
+
+
+def MC_sampling(q, M):  # we should be able to get rid of this step altogether
+    """
+    Bernoulli sampling using q as parameters.
+    Args:
+        q: parameter of Bernoulli distribution (ψ in the paper)
+        M: number of samples (m in the paper)
+
+    Returns:
+        Sampled subsets F(S+i), F(S)
+
+    """
+    bs, vs = q.shape
+    q = q.reshape(bs, 1, 1, vs).expand(bs, M, vs, vs)  # is bs = 1?
+    sample_matrix = torch.bernoulli(q)  # we should have torch uniform outside
+
+    mask = torch.cat([torch.eye(vs, vs).unsqueeze(0) for _ in range(M)], dim=0).unsqueeze(0).to(q.device)
+    # what does this line do?
+    # after the first unsqueeze we have a 3D tensor with 1 channel, vs rows, and vs columns
+    # after concat we have a 3D tensor with M channels, vs rows, and vs columns
+    # after the second unsqueeze we have a (1, M, vs, vs) shaped tensor
+    matrix_0 = sample_matrix * (1 - mask)  # element_wise multiplication
+    matrix_1 = matrix_0 + mask
+    return matrix_1, matrix_0  # F([x]_+i), F([x]_- i)
 
 
 class SetFunction(nn.Module):  # nn.Module is the base class for all NN modules. Any model should subclass this class.
@@ -46,36 +72,9 @@ class SetFunction(nn.Module):  # nn.Module is the base class for all NN modules.
         """
         return nn.Linear(2, self.dim_feature)
 
-    @staticmethod
-    def MC_sampling(q, M):  # we should be able to get rid of this step altogether
-        """
-        Bernoulli sampling using q as parameters.
-        Args:
-            q: parameter of Bernoulli distribution (ψ in the paper)
-            M: number of samples (m in the paper)
-
-        Returns:
-            Sampled subsets F(S+i), F(S)
-
-        """
-        bs, vs = q.shape
-        print(q.shape)
-        print(q.reshape(bs, 1, 1, vs))
-        q = q.reshape(bs, 1, 1, vs).expand(bs, M, vs, vs)  # is bs = 1?
-        print(q.shape)
-        sample_matrix = torch.bernoulli(q)  # we should have torch uniform outside
-
-        mask = torch.cat([torch.eye(vs, vs).unsqueeze(0) for _ in range(M)], dim=0).unsqueeze(0).to(q.device)
-        # what does this line do?
-        # after the first unsqueeze we have a 3D tensor with 1 channel, vs rows, and vs columns
-        # after concat we have a 3D tensor with M channels, vs rows, and vs columns
-        # after the second unsqueeze we have a (1, M, vs, vs) shaped tensor
-        matrix_0 = sample_matrix * (1 - mask)  # element_wise multiplication
-        matrix_1 = matrix_0 + mask
-        return matrix_1, matrix_0  # F([x]_+i), F([x]_- i)
-
     def mean_field_iteration(self, V, subset_i, subset_not_i):  # ψ_i in the paper
         q = torch.sigmoid((self.grad_F_S(V, subset_i, subset_not_i)).mean(1))
+        print("program enters here")
         return q
 
     def forward(self, V, S, neg_S, rec_net):  # return cross-entropy loss
@@ -98,6 +97,8 @@ class SetFunction(nn.Module):  # nn.Module is the base class for all NN modules.
         else:
             # to encode variational dist
             fea = self.init_layer(V).reshape(subset_mat.shape[0], -1, self.dim_feature)
+        # print(subset_mat.shape)
+        # print(fea.shape)
         fea = subset_mat @ fea
         fea = self.ff(fea)
         return fea
@@ -121,6 +122,7 @@ class SetFunction(nn.Module):  # nn.Module is the base class for all NN modules.
     def grad_F_S(self, V, subset_i, subset_not_i):
         F_1 = self.F_S(V, subset_i, fpi=True).squeeze(-1)
         F_0 = self.F_S(V, subset_not_i, fpi=True).squeeze(-1)
+        # print("program enters here")
         return F_1 - F_0
 
     def hess_F_S(self, V, subset_ij, subset_i_not_j, subset_j_not_i, subset_not_ij):
@@ -138,38 +140,8 @@ if __name__ == "__main__":
     #           'RNN_steps': 1, 'num_samples': 5}
     #
     # mySet = SetFunction(params)
-    # def MC_sampling(q, M):  # we should be able to get rid of this step altogether
-    #     """
-    #     Bernoulli sampling using q as parameters.
-    #     Args:
-    #         q: parameter of Bernoulli distribution (ψ in the paper)
-    #         M: number of samples (m in the paper)
     #
-    #     Returns:
-    #         Sampled subsets F(S+i), F(S)
-    #
-    #     """
-    #     bs, vs = q.shape
-    #     print(q.shape)
-    #     print(q)
-    #     print(q.reshape(bs, 1, 1, vs).shape)
-    #     print(q.reshape(bs, 1, 1, vs))
-    #     q = q.reshape(bs, 1, 1, vs).expand(bs, M, vs, vs)  # is bs = 1?
-    #     print(q.shape)
-    #     print(q)
-    #     sample_matrix = torch.bernoulli(q)  # we should have torch uniform outside
-    #
-    #     mask = torch.cat([torch.eye(vs, vs).unsqueeze(0) for _ in range(M)], dim=0).unsqueeze(0).to(q.device)
-    #     # what does this line do?
-    #     # after the first unsqueeze we have a 3D tensor with 1 channel, vs rows, and vs columns
-    #     # after concat we have a 3D tensor with M channels, vs rows, and vs columns
-    #     # after the second unsqueeze we have a (1, M, vs, vs) shaped tensor
-    #     matrix_0 = sample_matrix * (1 - mask)  # element_wise multiplication
-    #     matrix_1 = matrix_0 + mask
-    #     return matrix_1, matrix_0  # F([x]_+i), F([x]_- i)
-
     # device = torch.device('cuda:0')
     # q = .5 * torch.rand(2, 3).to(device)
     # subset_i, subset_not_i = MC_sampling(q, 4)
     # print(subset_i)
-

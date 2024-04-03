@@ -33,7 +33,7 @@ class EquiVSet(Base_Model):
         for i in range(self.hparams.RNN_steps):
             sample_matrix_1, sample_matrix_0 = self.set_func.MC_sampling(q, self.hparams.num_samples)
             q = self.set_func.mean_field_iteration(V, sample_matrix_1, sample_matrix_0)
-
+            # print("program enters here")
         return q
 
     def get_hparams_grid(self):

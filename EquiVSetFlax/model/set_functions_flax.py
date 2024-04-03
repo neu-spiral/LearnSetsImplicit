@@ -40,7 +40,8 @@ def MC_sampling(q, M):  # we should be able to get rid of this step altogether
     q = jax.device_put(q)
     sample_matrix = jax.random.bernoulli(jax.random.PRNGKey(758493), q)  # we should have torch uniform outside
 
-    mask = jnp.concatenate([jnp.eye(vs, vs).unsqueeze(0) for _ in range(M)], dim=0).unsqueeze(0)
+    mask = jnp.expand_dims(jnp.concatenate([jnp.expand_dims(jnp.eye(vs, vs), axis=0) for _ in range(M)], axis=0),
+                           axis=0)
     # what does this line do?
     # after the first unsqueeze we have a 3D tensor with 1 channel, vs rows, and vs columns
     # after concat we have a 3D tensor with M channels, vs rows, and vs columns
@@ -50,31 +51,33 @@ def MC_sampling(q, M):  # we should be able to get rid of this step altogether
     return matrix_1, matrix_0  # F([x]_+i), F([x]_- i)
 
 
+# noinspection PyAttributeOutsideInit
 class SetFunction(nn.Module):  # nn.Module is the base class for all NN modules. Any model should subclass this class.
     """
         Definition of the set function (F_θ) using a NN.
     """
     params: dict
+    dim_feature: int = 256
 
-    # def __init__(self, params):
-    #     super(SetFunction, self).__init__()
-    #     self.params = params  # params = {v_size: 30,
-    #     #                                 s_size: 10,
-    #     #                                 num_layers: 2,
-    #     #                                 batch_size: 4,
-    #     #                                 lr: 0.0001,
-    #     #                                 weight_decay: 1e-5,
-    #     #                                 init: 0.05,
-    #     #                                 clip: 10,
-    #     #                                 epochs: 100,
-    #     #                                 num_runs: 1,
-    #     #                                 num_bad_epochs: 6,
-    #     #                                 num_workers: 2
-    #     #                                 }
-    #     self.dim_feature = 256  # dimension of the NN layers
-    #
-    #     self.init_layer = self.define_init_layer()  # custom init layers for different setups
-    #     self.ff = FF(self.dim_feature, 500, 1, self.params.num_layers)  # forward fold
+    # params = {v_size: 30,
+    #           s_size: 10,
+    #           num_layers: 2,
+    #           batch_size: 4,
+    #           lr: 0.0001,
+    #           weight_decay: 1e-5,
+    #           init: 0.05,
+    #           clip: 10,
+    #           epochs: 100,
+    #           num_runs: 1,
+    #           num_bad_epochs: 6,
+    #           num_workers: 2
+    #           }
+
+    def setup(self):
+        self.init_layer = self.define_init_layer()
+        self.ff = FF(self.dim_feature, 500, 1, self.params['num_layers'])  # self.ff is now model in XORflax.py
+        # inp = jax.random.normal(jax.random.PRNGKey(41), (256, 500, 1, 2))
+        # params = self.ff.init(jax.random.PRNGKey(42), inp[0], inp[1], inp[2], inp[3])
 
     def define_init_layer(self):
         """
@@ -87,7 +90,7 @@ class SetFunction(nn.Module):  # nn.Module is the base class for all NN modules.
         q = jax.nn.sigmoid((self.grad_F_S(V, subset_i, subset_not_i)).mean(1))
         return q
 
-    def __call__(self, V, S, neg_S, rec_net):  # should be __call__
+    def __call__(self, V, S, neg_S, rec_net):
         """"returns cross-entropy loss."""
         bs, vs = V.shape[:2]
         q = .5 * jnp.ones((bs, vs))  # ψ_0 <-- 0.5 * vector(1)
@@ -125,14 +128,19 @@ class SetFunction(nn.Module):  # nn.Module is the base class for all NN modules.
         return loss
 
     def F_S(self, V, subset_mat, fpi=False):
+        # print(self.init_layer(V).type)
+        print(self.init_layer(V).shape)
         if fpi:
             # to fix point iteration (aka mean-field iteration)
             fea = self.init_layer(V).reshape(subset_mat.shape[0], 1, -1, self.dim_feature)
         else:
             # to encode variational dist
             fea = self.init_layer(V).reshape(subset_mat.shape[0], -1, self.dim_feature)
+        print(subset_mat.shape)  # (bs, M, vs, vs)
+        print(fea.shape)  # (bs, 1, vs, dim_feature)
         fea = subset_mat @ fea
         fea = self.ff(fea)
+        # self.ff.apply(params, fea)
         return fea
 
     # def multilinear_relaxation(F_S, y):
@@ -172,9 +180,9 @@ if __name__ == "__main__":
 
     rng = jax.random.PRNGKey(42)
     rng, V_inp_rng, S_inp_rng, neg_S_inp_rng, rec_net_inp_rng, init_rng = jax.random.split(rng, 6)
-    V_inp = jax.random.normal(V_inp_rng, (2, 3))  # Batch size 4, input size (V) 100
-    S_inp = jax.random.normal(S_inp_rng, (4, 10))  # Batch size 4, input size (V) 10
-    neg_S_inp = jax.random.normal(neg_S_inp_rng, (4, 90))  # Batch size 4, input size (V) 100
+    V_inp = jax.random.normal(V_inp_rng, (4, 100, 2))  # Batch size 4, input size (V) 100, dim_input 2
+    S_inp = jax.random.normal(S_inp_rng, (4, 100))  # Batch size 4, input size (V) 100
+    neg_S_inp = jax.random.normal(neg_S_inp_rng, (4, 100))  # Batch size 4, input size (V) 100
     rec_net_inp = jax.random.normal(rec_net_inp_rng, (4, 1))  # Batch size 4, input size (V) 100
     # MOONS_CONFIG = {'data_name': 'moons', 'v_size': 100, 's_size': 10, 'batch_size': 128}
     # x = random.normal(key1, (10,))  # Dummy input data
