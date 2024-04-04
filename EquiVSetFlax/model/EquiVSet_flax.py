@@ -1,5 +1,5 @@
 import flax.linen as nn
-
+import optax
 from model.base_model_flax import Base_Model
 from model.set_functions_flax import SetFunction, RecNet
 import model.train_module
@@ -69,18 +69,21 @@ class EquiVSetTrainer(TrainerModule):
 
 
 class EquiVSet(Base_Model):
-    def __init__(self, hparams):
-        super().__init__(hparams=hparams)
+    def __init__(self, hparams : Dict[str, Any]):
+        super().__init__(hparams=hparams)  # might include a model_class
 
-    def define_parameters(self):
+    def define_parameters(self):  # might be renamed as define_models
+        # these are okay for now, they will need initialization later
         self.set_func = SetFunction(params=self.hparams)
         self.rec_net = RecNet(params=self.hparams) if self.hparams.mode != 'diffMF' else None
 
-    def configure_optimizers(self):
-        optim_energy = flax.optim.Adam(self.set_func.parameters(), lr=self.hparams.lr,
+    def configure_optimizers(self):  # might be implemented in the parent class, equivalent of init_optimizer in
+        # train_module.py
+        optim_energy = optax.adam(self.set_func.parameters(), lr=self.hparams.lr,
                                         weight_decay=self.hparams.weight_decay)
-        optim_var = flax.optim.Adam(self.rec_net.parameters(), lr=self.hparams.lr,
+        optim_var = optax.adam(self.rec_net.parameters(), lr=self.hparams.lr,
                                      weight_decay=self.hparams.weight_decay) if self.hparams.mode != 'diffMF' else None
+        # this just returns opt_class in train_module.py
         return optim_energy, optim_var
 
     def configure_gradient_clippers(self):
@@ -91,6 +94,7 @@ class EquiVSet(Base_Model):
             bs, vs = V.shape[:2]
             q = .5 * torch.ones(bs, vs).to(V.device)
         else:
+            # ignoring here for now
             # mode == 'ind' or 'copula'
             q = self.rec_net.get_vardist(V, bs)
 
