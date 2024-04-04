@@ -12,7 +12,7 @@ from utils.flax_helper import FF, normal_cdf
 
 
 def cross_entropy(q, S, neg_S):  # Eq. (5) in the paper
-    loss = - jnp.sum((S * jnp.log(q + 1e-12) + (1 - S) * jnp.log(1 - q + 1e-12)) * neg_S, dim=-1)
+    loss = - jnp.sum((S * jnp.log(q + 1e-12) + (1 - S) * jnp.log(1 - q + 1e-12)) * neg_S, axis=-1)
     return loss.mean()
 
 
@@ -36,7 +36,7 @@ def MC_sampling(q, M):  # we should be able to get rid of this step altogether
     """
     bs, vs = q.shape
     q = np.broadcast_to(q.reshape(bs, 1, 1, vs), (bs, M, vs, vs))  # .expand(bs, M, vs, vs)
-    # is bs = 1? bs should be the batch size
+    # bs = the batch size
     q = jax.device_put(q)
     sample_matrix = jax.random.bernoulli(jax.random.PRNGKey(758493), q)  # we should have torch uniform outside
 
@@ -73,11 +73,11 @@ class SetFunction(nn.Module):  # nn.Module is the base class for all NN modules.
     #           num_workers: 2
     #           }
 
+    # For instance, if we define more functions on a module besides __call__ and want to reuse some modules, it is
+    # recommended to use the setup version.
     def setup(self):
         self.init_layer = self.define_init_layer()
-        self.ff = FF(self.dim_feature, 500, 1, self.params['num_layers'])  # self.ff is now model in XORflax.py
-        # inp = jax.random.normal(jax.random.PRNGKey(41), (256, 500, 1, 2))
-        # params = self.ff.init(jax.random.PRNGKey(42), inp[0], inp[1], inp[2], inp[3])
+        self.ff = FF(self.dim_feature, 500, 1, self.params['num_layers'])
 
     def define_init_layer(self):
         """
@@ -124,7 +124,7 @@ class SetFunction(nn.Module):  # nn.Module is the base class for all NN modules.
         #
         # theta = theta - eta * jax.grad(lambda theta: fixed_point_layer(fwd_solver, f, theta, x).sum())(theta)
 
-        loss = self.cross_entropy(q, S, neg_S)  # no need for self.
+        loss = cross_entropy(q, S, neg_S)  # no need for self.
         return loss
 
     def F_S(self, V, subset_mat, fpi=False):
@@ -139,7 +139,7 @@ class SetFunction(nn.Module):  # nn.Module is the base class for all NN modules.
         print(subset_mat.shape)  # (bs, M, vs, vs)
         print(fea.shape)  # (bs, 1, vs, dim_feature)
         fea = subset_mat @ fea
-        fea = self.ff(fea)
+        fea = self.ff(fea)  # goes thru FF block
         # self.ff.apply(params, fea)
         return fea
 

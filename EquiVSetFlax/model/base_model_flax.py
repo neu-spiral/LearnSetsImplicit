@@ -1,27 +1,30 @@
 import argparse
-from typing import Sequence
+from typing import Any, Sequence, Dict
 import numpy as np
 import random
 import jax
 import jax.numpy as jnp
 import flax.linen as nn
+from flax.training import train_state, checkpoints
 from data_loader import TwoMoons, GaussianMixture, Amazon, CelebA
 from utils.logger import Logger
 from timeit import default_timer as timer
 
 
 class BaseModel(nn.Module):
-    # act_fn: Callable
-    # num_classes: int = 10
-    # hidden_sizes: Sequence = (512, 256, 256, 128)
-    # kernel_init: Callable = nn.linear.default_kernel_init
+
+    def __init__(self,
+                 hparams : Dict[str, Any],
+                 exmp_input: Any,
+                 seed: int = 42,
+                 **kwargs):
     pass
 
 
 class Base_Model(nn.Module):
-    @nn.compact
+
     def __init__(self, hparams):
-        super().__init__()
+        # super().__init__()
         self.hparams = hparams
         self.hparams.save_path = self.hparams.root_path + "logs/" + self.hparams.model_name
         self.load_data()
