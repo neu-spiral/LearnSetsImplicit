@@ -23,8 +23,8 @@ class BaseModel(nn.Module):
 
 class Base_Model(nn.Module):
 
-    def __init__(self, hparams):
-        # super().__init__()
+    def __init__(self, hparams : Dict[str, Any]):
+        super().__init__()
         self.hparams = hparams
         self.hparams.save_path = self.hparams.root_path + "logs/" + self.hparams.model_name
         self.load_data()
@@ -84,8 +84,9 @@ class Base_Model(nn.Module):
         logger.log('Test: {:8.2f}'.format(test_perf))
 
     def run_training_session(self, run_num, logger):
-        self.train()
+        self.train()  # just sets the model in training mode
 
+        # ignore below for now
         # Scramble hyperparameters if number of runs is greater than 1.
         if self.hparams.num_runs > 1:
             logger.log('RANDOM RUN: %d/%d' % (run_num, self.hparams.num_runs))
