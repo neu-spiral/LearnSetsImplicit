@@ -18,14 +18,14 @@ class BaseModel(nn.Module):
                  exmp_input: Any,
                  seed: int = 42,
                  **kwargs):
-    pass
+        pass
 
 
 class Base_Model(nn.Module):
 
     def __init__(self, hparams : Dict[str, Any]):
         super().__init__()
-        self.hparams = hparams
+        self.hparams = hparams  # needs exmp_input and state attribute
         self.hparams.save_path = self.hparams.root_path + "logs/" + self.hparams.model_name
         self.load_data()
 
@@ -52,66 +52,66 @@ class Base_Model(nn.Module):
     def configure_gradient_clippers(self):
         raise NotImplementedError
 
-    def run_training_sessions(self):
-        logger = Logger(self.hparams.save_path + '.log', on=True)
-        val_perfs = []
-        test_perfs = []
-        best_val_perf = float('-inf')
-        start = timer()
-        random.seed(self.hparams.seed)  # For reproducible random runs
-
-        for run_num in range(1, self.hparams.num_runs + 1):
-            state_dict, val_perf, test_perf = self.run_training_session(run_num, logger)
-            val_perfs.append(val_perf)
-            test_perfs.append(test_perf)
-
-            if val_perf > best_val_perf:
-                best_val_perf = val_perf
-                logger.log('----New best {:8.2f}, saving'.format(val_perf))
-                torch.save({'hparams': self.hparams,
-                            'state_dict': state_dict}, self.hparams.save_path)
-
-        logger.log('Time: %s' % str(timedelta(seconds=round(timer() - start))))
-        self.load()
-        if self.hparams.num_runs > 1:
-            logger.log_perfs(val_perfs)
-            logger.log('best hparams: ' + self.flag_hparams())
-            if self.hparams.auto_repar == False:
-                logger.log_test_perfs(test_perfs, self.hparams)
-
-        val_perf, test_perf = self.run_test()
-        logger.log('Val:  {:8.2f}'.format(val_perf))
-        logger.log('Test: {:8.2f}'.format(test_perf))
-
     def run_training_session(self, run_num, logger):
-        self.train()  # just sets the model in training mode
+        # self.train()  # just sets the model in training mode
 
         # ignore below for now
         # Scramble hyperparameters if number of runs is greater than 1.
         if self.hparams.num_runs > 1:
             logger.log('RANDOM RUN: %d/%d' % (run_num, self.hparams.num_runs))
-            if self.hparams.auto_repar == True:
+            if self.hparams.auto_repar:
                 for hparam, values in self.get_hparams_grid().items():
                     assert hasattr(self.hparams, hparam)
                     self.hparams.__dict__[hparam] = random.choice(values)
             else:
                 self.hparams.seed = np.random.randint(100000)
 
-        np.random.seed(self.hparams.seed)
-        random.seed(self.hparams.seed)
-        torch.manual_seed(self.hparams.seed)
-        torch.cuda.manual_seed_all(self.hparams.seed)
+        # self.setup()
+        # set_func, rec_net = self.get_parameters()
 
-        self.define_parameters()
         logger.log(str(self))
         logger.log('#params: %d' % sum([p.numel() for p in self.parameters()]))
         logger.log('hparams: %s' % self.flag_hparams())
 
-        device = torch.device('cuda' if self.hparams.cuda else 'cpu')
-        self.to(device)
+        np.random.seed(self.hparams.seed)
+        random.seed(self.hparams.seed)
+        # torch.manual_seed(self.hparams.seed)
+        # torch.cuda.manual_seed_all(self.hparams.seed)
+
+        # Prepare PRNG and input
+        model_rng = jax.random.PRNGKey(self.hparams.seed)
+        model_rng, init_rng = jax.random.split(model_rng)
+        exmp_input = [self.hparams.exmp_input] if not isinstance(self.hparams.exmp_input, (list, tuple)) \
+            else self.hparams.exmp_input
+        # Run model initialization
+        set_func_variables = self.set_func.init(init_rng, *exmp_input, train=True)
+        # Create default state. Optimizer is initialized later
+        self.hparams.state = TrainState(step=0,
+                                        apply_fn=self.set_func.apply,
+                                        params=set_func_variables['params'],
+                                        batch_stats=set_func_variables.get('batch_stats'),  # this may be commented out
+                                        rng=model_rng,  # this too may be commented out
+                                        tx=None,
+                                        opt_state=None)
+
+        # device = torch.device('cuda' if self.hparams.cuda else 'cpu')
+        # self.to(device)
 
         optim_energy, optim_var = self.configure_optimizers()
         gradient_clippers = self.configure_gradient_clippers()
+        # Clip gradients at max value, and evt. apply weight decay
+        transf = [optax.clip_by_global_norm(self.hparams.clip)]
+        optimizer = optax.chain(
+            *transf,
+            optim_energy
+        )
+        # Initialize training state
+        self.hparams.state = TrainState.create(apply_fn=self.state.apply_fn,
+                                               params=self.state.params,
+                                               batch_stats=self.state.batch_stats,
+                                               tx=optimizer,
+                                               rng=self.state.rng)
+
         train_loader, val_loader, test_loader = self.data.get_loaders(
             self.hparams.batch_size, self.hparams.num_workers,
             shuffle_train=True, get_test=True)
@@ -191,6 +191,37 @@ class Base_Model(nn.Module):
         logger.log("time per training epoch: " + str(np.mean(times)))
         return best_state_dict, best_val_perf, test_perf
 
+    def run_training_sessions(self):
+        logger = Logger(self.hparams.save_path + '.log', on=True)
+        val_perfs = []
+        test_perfs = []
+        best_val_perf = float('-inf')
+        start = timer()
+        random.seed(self.hparams.seed)  # For reproducible random runs
+
+        for run_num in range(1, self.hparams.num_runs + 1):
+            state_dict, val_perf, test_perf = self.run_training_session(run_num, logger)
+            val_perfs.append(val_perf)
+            test_perfs.append(test_perf)
+
+            if val_perf > best_val_perf:
+                best_val_perf = val_perf
+                logger.log('----New best {:8.2f}, saving'.format(val_perf))
+                torch.save({'hparams': self.hparams,
+                            'state_dict': state_dict}, self.hparams.save_path)
+
+        logger.log('Time: %s' % str(timedelta(seconds=round(timer() - start))))
+        self.load()
+        if self.hparams.num_runs > 1:
+            logger.log_perfs(val_perfs)
+            logger.log('best hparams: ' + self.flag_hparams())
+            if self.hparams.auto_repar == False:
+                logger.log_test_perfs(test_perfs, self.hparams)
+
+        val_perf, test_perf = self.run_test()
+        logger.log('Val:  {:8.2f}'.format(val_perf))
+        logger.log('Test: {:8.2f}'.format(test_perf))
+
     def evaluate(self, eval_loader, device):
         self.eval()
         with torch.no_grad():
@@ -214,7 +245,7 @@ class Base_Model(nn.Module):
         if checkpoint['hparams'].cuda and not self.hparams.cuda:
             checkpoint['hparams'].cuda = False
         self.hparams = checkpoint['hparams']
-        self.define_parameters()
+        self.setup()
         self.load_state_dict(checkpoint['state_dict'])
         self.to(device)
 
