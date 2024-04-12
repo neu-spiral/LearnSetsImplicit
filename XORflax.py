@@ -1,6 +1,7 @@
 import jax
 import flax
 import optax
+import os
 from tqdm.auto import tqdm
 import numpy as np
 import jax.numpy as jnp
@@ -214,18 +215,20 @@ train_dataset = XORDataset(size=2500, seed=42)
 train_data_loader = data.DataLoader(train_dataset, batch_size=128, shuffle=True, collate_fn=numpy_collate)
 trained_model_state = train_model(model_state, train_data_loader, num_epochs=100)
 
-# checkpoints.save_checkpoint(ckpt_dir='my_checkpoints/',  # Folder to save checkpoint in
-#                             target=trained_model_state,  # What to save. To only save parameters, use model_state.params
-#                             step=100,  # Training step or other metric to save best model on
-#                             prefix='my_model',  # Checkpoint file name prefix
-#                             overwrite=True  # Overwrite existing checkpoint files
-#                             )
-#
-# loaded_model_state = checkpoints.restore_checkpoint(ckpt_dir='my_checkpoints/',  # Folder with the checkpoints
-#                                                     target=model_state,
-#                                                     # (optional) matching object to rebuild state in
-#                                                     prefix='my_model'  # Checkpoint file name prefix
-#                                                     )
+
+ckpt_dir = os.path.abspath("my_checkpoints/")
+checkpoints.save_checkpoint(ckpt_dir=ckpt_dir,  # Folder to save checkpoint in
+                            target=trained_model_state,  # What to save. To only save parameters, use model_state.params
+                            step=100,  # Training step or other metric to save best model on
+                            prefix='my_model',  # Checkpoint file name prefix
+                            overwrite=True  # Overwrite existing checkpoint files
+                            )
+
+loaded_model_state = checkpoints.restore_checkpoint(ckpt_dir=ckpt_dir,  # Folder with the checkpoints
+                                                    target=model_state,
+                                                    # (optional) matching object to rebuild state in
+                                                    prefix='my_model'  # Checkpoint file name prefix
+                                                    )
 
 test_dataset = XORDataset(size=500, seed=123)
 # drop_last -> Don't drop the last batch, although it is smaller than 128

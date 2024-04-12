@@ -26,6 +26,7 @@ def get_init_function(init_value):
     return init_function
 
 
+# no need for flax
 def move_to_device(obj, device):
     if torch.is_tensor(obj):
         return obj.to(device)

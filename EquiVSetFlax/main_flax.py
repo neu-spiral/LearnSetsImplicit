@@ -33,6 +33,8 @@ from pytorch_lightning.loggers import TensorBoardLogger, WandbLogger
 
 from model.EquiVSet_trainer import EquiVSetTrainer
 from data_loader import TwoMoons
+# jax.config.update("jax_debug_nans", True)  # stops execution when nan occurs
+jax.config.update("jax_enable_x64", True)  # solves the nan value issue when calculating q, hence loss
 
 if __name__ == "__main__":
     params = {'data_name': 'moons', 'root_path': './', 'v_size': 100, 's_size': 10, 'num_layers': 2, 'batch_size': 128,
@@ -68,7 +70,8 @@ if __name__ == "__main__":
                               optimizer_hparams={'lr': 4e-3},
                               logger_params={'base_log_dir': CHECKPOINT_PATH},
                               exmp_input=next(iter(train_loader)),
-                              check_val_every_n_epoch=5)
+                              check_val_every_n_epoch=5,
+                              debug=False)
 
     metrics = trainer.train_model(train_loader,
                                   val_loader,

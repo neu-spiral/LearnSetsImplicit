@@ -12,6 +12,12 @@ from utils.flax_helper import FF, normal_cdf
 
 
 def cross_entropy(q, S, neg_S):  # Eq. (5) in the paper
+    # jax.debug.print("S is {S}\n", S=S)
+    # jax.debug.print("shape of S is {S.shape}\n", S=S)
+    # jax.debug.print("q is {q}\n", q=q)
+    # jax.debug.print("shape of q is {q.shape}\n", q=q)
+    # jax.debug.print("neg_S is {neg_S}\n", neg_S=neg_S)
+    # jax.debug.print("shape of neg_S is {neg_S.shape}\n", neg_S=neg_S)
     loss = - jnp.sum((S * jnp.log(q + 1e-12) + (1 - S) * jnp.log(1 - q + 1e-12)) * neg_S, axis=-1)
     return loss.mean()
 
@@ -125,6 +131,7 @@ class SetFunction(nn.Module):  # nn.Module is the base class for all NN modules.
         # theta = theta - eta * jax.grad(lambda theta: fixed_point_layer(fwd_solver, f, theta, x).sum())(theta)
 
         loss = cross_entropy(q, S, neg_S)
+        # jax.debug.print("loss is {loss}\n", loss=loss)
         return loss
 
     def F_S(self, V, subset_mat, fpi=False):
@@ -304,7 +311,7 @@ if __name__ == "__main__":
     # jax.tree_util.tree_map(lambda x: x.shape, params)  # Checking output shapes
     mySetModel = SetFunction(params=params)
     print(mySetModel)
-    new_params = mySetModel.init(init_rng, V_inp, S_inp, neg_S_inp, rec_net_inp)
+    new_params = mySetModel.init(init_rng, V_inp, S_inp, neg_S_inp)
     print(new_params)
 
     # subset_i, subset_not_i = mySet.MC_sampling(q, 500)
