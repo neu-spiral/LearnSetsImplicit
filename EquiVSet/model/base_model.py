@@ -22,7 +22,7 @@ class Base_Model(nn.Module):
     def __init__(self, hparams):
         super().__init__()
         self.hparams = hparams
-        self.hparams.save_path = self.hparams.root_path + self.hparams.model_name
+        self.hparams.save_path = self.hparams.root_path + "logs/" + self.hparams.model_name
         self.load_data()
 
     def load_data(self):
