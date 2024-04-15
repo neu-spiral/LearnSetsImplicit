@@ -65,20 +65,6 @@ class SetFunction(nn.Module):  # nn.Module is the base class for all NN modules.
     params: dict
     dim_feature: int = 256
 
-    # params = {v_size: 30,
-    #           s_size: 10,
-    #           num_layers: 2,
-    #           batch_size: 4,
-    #           lr: 0.0001,
-    #           weight_decay: 1e-5,
-    #           init: 0.05,
-    #           clip: 10,
-    #           epochs: 100,
-    #           num_runs: 1,
-    #           num_bad_epochs: 6,
-    #           num_workers: 2
-    #           }
-
     # For instance, if we define more functions on a module besides __call__ and want to reuse some modules, it is
     # recommended to use the setup version.
     def setup(self):

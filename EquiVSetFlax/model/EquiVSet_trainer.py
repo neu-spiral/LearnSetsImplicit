@@ -32,6 +32,7 @@ from pytorch_lightning.loggers import TensorBoardLogger, WandbLogger
 from model.trainer_module import TrainerModule
 from model.set_functions_flax import SetFunction, RecNet, MC_sampling
 from utils.flax_evaluation import compute_metrics
+from jax.experimental.host_callback import call
 
 
 class EquiVSetTrainer(TrainerModule):
@@ -69,9 +70,12 @@ class EquiVSetTrainer(TrainerModule):
             step_metrics = self.eval_step(self.state, batch)  # assume this returns jc
             # batch_size = batch[0].shape[0] if isinstance(batch, (list, tuple)) else batch.shape[0]
             for key in step_metrics:  # metrics[key] = jc_list
-                metrics[key].append(step_metrics[key])
+                if key in metrics:
+                    metrics[key].append(step_metrics[key])
+                else:
+                    metrics[key] = [step_metrics[key]]
             # num_elements += batch_size
-        metrics = {(log_prefix + key): 100 * jnp.concatenate(metrics[key], axis=0).mean(0) for key in metrics}
+        metrics = {(log_prefix + key): 100 * np.array(jnp.concatenate(metrics[key], axis=0).mean(0)) for key in metrics}  # convert to numpy
         return metrics
 
     def create_functions(self):
@@ -82,14 +86,19 @@ class EquiVSetTrainer(TrainerModule):
             # jax.debug.print("neg_S is {neg_S}", neg_S=neg_S)
             return self.model.apply({'params': params}, V, S, neg_S)
 
-        def inference(V, bs):
+        def inference(state, V, bs):
             # V, S, neg_S = batch
             bs, vs = V.shape[:2]
             q = .5 * jnp.ones((bs, vs))
 
-            for i in range(self.params['RNN_steps']):
-                sample_matrix_1, sample_matrix_0 = MC_sampling(q, self.params['num_samples'])
-                q = self.set_func.mean_field_iteration(V, sample_matrix_1, sample_matrix_0)
+            for i in range(self.model_hparams['params']['RNN_steps']):
+                sample_matrix_1, sample_matrix_0 = MC_sampling(q, self.model_hparams['params']['num_samples'])
+                key = jax.random.key(42)
+                V_dummy = jnp.ones(shape=V.shape)
+                s1_dummy = jnp.ones(shape=sample_matrix_1.shape)
+                s0_dummy = jnp.ones(shape=sample_matrix_0.shape)
+                init_params = self.model.init(key, V_dummy, s1_dummy, s0_dummy, method='mean_field_iteration')
+                q = self.model.apply(init_params, V, sample_matrix_1, sample_matrix_0, method='mean_field_iteration')
                 # print("program enters here")
             return q
 
@@ -106,14 +115,20 @@ class EquiVSetTrainer(TrainerModule):
             # loss = entropy_loss(state.params, batch)
             V_set, S_set, neg_S_set = batch
 
-            q = inference(V_set, S_set.shape[0])
-            idx = jnp.argpartition(q, S_set.shape[-1], axis=1)
+            q = inference(state, V_set, S_set.shape[0])
+            idx = jnp.argpartition(q, -S_set.shape[-1], axis=1)  # [-S_set.shape[-1]:]
+            # call(lambda x: print(f"shape[0] {x}"), S_set.shape[0])  # 128
+            # call(lambda x: print(f"shape[-1] {x}"), S_set.shape[-1])  # 100
+            # call(lambda x: print(f"len idx {x}"), len(idx))  # 100
 
             pre_list = []
+            # s_size = jnp.sum(S_set[0]).astype(int)  # needs s_size as input
             for i in range(len(idx)):
                 pre_mask = jnp.zeros([S_set.shape[-1]])
-                ids = idx[i][:int(jnp.sum(S_set[i]))]
-                pre_mask[ids] = 1
+                # print(np.array(jnp.sum(S_set[i])))
+                # call(lambda x: print(f"sum is {x}"), jnp.sum(S_set[i]))
+                ids = idx[i][:self.model_hparams['params']['s_size']]  # this needs static slicing
+                pre_mask = pre_mask.at[ids].set(1)
                 pre_list.append(jnp.expand_dims(pre_mask, axis=0))
             pre_mask = jnp.concatenate(pre_list, axis=0)
             true_mask = S_set
