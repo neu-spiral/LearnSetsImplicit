@@ -52,22 +52,16 @@ if __name__ == "__main__":
     batch_size = params['batch_size']
     num_workers = params['num_workers']
 
-
-    def transform(x):
-        return x.numpy().astype(np.float32)
-
-
     def tensor_to_numpy(x):
         x = np.array(x, dtype=np.float32)
         return x
-
 
     train_loader, val_loader, test_loader = data.get_loaders(batch_size, num_workers, transform=tensor_to_numpy)
     # print(next(iter(train_loader)))
 
     trainer = EquiVSetTrainer(params=params,
                               dim_feature=256,
-                              optimizer_hparams={'lr': 4e-3},
+                              optimizer_hparams={'lr': 0.0001},
                               logger_params={'base_log_dir': CHECKPOINT_PATH},
                               exmp_input=next(iter(train_loader)),
                               check_val_every_n_epoch=5,
@@ -79,5 +73,8 @@ if __name__ == "__main__":
                                   num_epochs=50)
 
     print(f'Training loss: {metrics["train/loss"]}')
-    print(f'Validation loss: {metrics["val/loss"]}')
-    print(f'Test loss: {metrics["test/loss"]}')
+    # print(f'Training Jaccard index: {metrics["train/jaccard"]}')
+    # print(f'Validation loss: {metrics["val/loss"]}')
+    print(f'Validation Jaccard index: {metrics["val/jaccard"]}')
+    # print(f'Test loss: {metrics["test/loss"]}')
+    print(f'Test Jaccard index: {metrics["test/jaccard"]}')

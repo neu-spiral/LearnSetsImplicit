@@ -389,7 +389,7 @@ class TrainerModule(nn.Module):  # why did they define it without nn.Module?
         """
         if old_metrics is None:
             return True
-        for key, is_larger in [('val/val_metric', False), ('val/acc', True), ('val/loss', False)]:
+        for key, is_larger in [('val/jaccard', True), ('val/acc', True), ('val/loss', False)]:
             if key in new_metrics:
                 if is_larger:
                     return new_metrics[key] > old_metrics[key]

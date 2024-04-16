@@ -136,6 +136,6 @@ class EquiVSetTrainer(TrainerModule):
             intersection = true_mask * pre_mask
             union = true_mask + pre_mask - intersection
             jc = intersection.sum(axis=-1) / union.sum(axis=-1)
-            return {'loss': jc}  # loss
+            return {'jaccard': jc}  # loss
 
         return train_step, eval_step

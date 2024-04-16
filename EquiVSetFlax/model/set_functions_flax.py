@@ -92,30 +92,6 @@ class SetFunction(nn.Module):  # nn.Module is the base class for all NN modules.
             sample_matrix_1, sample_matrix_0 = MC_sampling(q, self.params['num_samples'])
             q = self.mean_field_iteration(V, sample_matrix_1, sample_matrix_0)  # ψ
 
-        # there should be an alternative q definition here using IFT and AutoGrad
-        # @partial(jax.custom_vjp, nondiff_argnums=(0, 1))
-        # def fixed_point_layer(solver, f, params):
-        #     psi_star = solver(lambda psi: f(params, psi), psi_init=jnp.zeros_like(x))
-        #     return psi_star
-        #
-        # def fixed_point_layer_fwd(solver, f, params):
-        #     psi_star = fixed_point_layer(solver, f, params)
-        #     return psi_star, (params, psi_star)
-        #
-        # def fixed_point_layer_bwd(solver, f, res, psi_star_bar):
-        #     params, x, psi_star = res
-        #     _, vjp_a = jax.vjp(lambda params, x: f(params, psi_star), params)
-        #     _, vjp_psi = jax.vjp(lambda psi: f(params, psi), psi_star)
-        #     return vjp_a(solver(lambda u: vjp_psi(u)[0] + psi_star_bar, psi_init=jnp.zeros_like(psi_star)))
-        #
-        # fixed_point_layer.defvjp(fixed_point_layer_fwd, fixed_point_layer_bwd)
-        #
-        # theta = random.normal(random.PRNGKey(0), (ndim, ndim)) / jnp.sqrt(ndim)
-        #
-        # psi_star = fixed_point_layer(fwd_solver, f, theta)
-        #
-        # theta = theta - eta * jax.grad(lambda theta: fixed_point_layer(fwd_solver, f, theta, x).sum())(theta)
-
         loss = cross_entropy(q, S, neg_S)
         # jax.debug.print("loss is {loss}\n", loss=loss)
         return loss
