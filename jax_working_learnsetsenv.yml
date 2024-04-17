@@ -317,7 +317,7 @@ dependencies:
       - flax==0.8.2
       - imagesize==1.4.1
       - isort==6.0.0b2
-      - jaxlib==0.4.25+cuda12.cudnn89
+#      - jaxlib==0.4.25+cuda12.cudnn89
       - littleutils==0.2.2
       - markdown-it-py==3.0.0
       - mdurl==0.1.2
@@ -359,4 +359,4 @@ dependencies:
       - typer==0.12.0
       - typer-cli==0.12.0
       - typer-slim==0.12.0
-prefix: /home/gozdeozcan/miniconda3/envs/learnsetsenv
+
