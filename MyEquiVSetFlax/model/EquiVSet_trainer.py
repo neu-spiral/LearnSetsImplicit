@@ -93,12 +93,7 @@ class EquiVSetTrainer(TrainerModule):
 
             for i in range(self.model_hparams['params']['RNN_steps']):
                 sample_matrix_1, sample_matrix_0 = MC_sampling(q, self.model_hparams['params']['num_samples'])
-                key = jax.random.key(42)
-                V_dummy = jnp.ones(shape=V.shape)
-                s1_dummy = jnp.ones(shape=sample_matrix_1.shape)
-                s0_dummy = jnp.ones(shape=sample_matrix_0.shape)
-                init_params = self.model.init(key, V_dummy, s1_dummy, s0_dummy, method='mean_field_iteration')
-                q = self.model.apply(init_params, V, sample_matrix_1, sample_matrix_0, method='mean_field_iteration')
+                q = self.model.apply({'params': state.params}, V, sample_matrix_1, sample_matrix_0, method='mean_field_iteration')
                 # print("program enters here")
             return q
 
@@ -116,7 +111,8 @@ class EquiVSetTrainer(TrainerModule):
             V_set, S_set, neg_S_set = batch
 
             q = inference(state, V_set, S_set.shape[0])
-            idx = jnp.argpartition(q, -S_set.shape[-1], axis=1)  # [-S_set.shape[-1]:]
+            # idx = jnp.argpartition(q, -S_set.shape[-1], axis=1)  # [-S_set.shape[-1]:]
+            _, idx = jax.lax.top_k(q, S_set.shape[-1])
             # call(lambda x: print(f"shape[0] {x}"), S_set.shape[0])  # 128
             # call(lambda x: print(f"shape[-1] {x}"), S_set.shape[-1])  # 100
             # call(lambda x: print(f"len idx {x}"), len(idx))  # 100

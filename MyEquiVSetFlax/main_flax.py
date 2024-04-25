@@ -65,7 +65,8 @@ if __name__ == "__main__":
                               logger_params={'base_log_dir': CHECKPOINT_PATH},
                               exmp_input=next(iter(train_loader)),
                               check_val_every_n_epoch=5,
-                              debug=False)
+                              debug=False,
+                              enable_progress_bar=False)
 
     metrics = trainer.train_model(train_loader,
                                   val_loader,

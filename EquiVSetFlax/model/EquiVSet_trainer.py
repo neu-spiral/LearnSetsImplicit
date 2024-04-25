@@ -93,13 +93,7 @@ class EquiVSetTrainer(TrainerModule):
 
             for i in range(self.model_hparams['params']['RNN_steps']):
                 sample_matrix_1, sample_matrix_0 = MC_sampling(q, self.model_hparams['params']['num_samples'])
-                # key = jax.random.key(42)
-                # V_dummy = jnp.ones(shape=V.shape)
-                # s1_dummy = jnp.ones(shape=sample_matrix_1.shape)
-                # s0_dummy = jnp.ones(shape=sample_matrix_0.shape)
-                # init_params = self.model.init(key, V_dummy, s1_dummy, s0_dummy, method='mean_field_iteration')
                 q = self.model.apply({'params': state.params}, V, sample_matrix_1, sample_matrix_0, method='mean_field_iteration')
-                # print("program enters here")
             return q
 
         def train_step(state, batch):
