@@ -9,7 +9,7 @@ import numpy as np
 from copy import copy
 from glob import glob
 from collections import defaultdict
-
+import matplotlib.pyplot as plt
 # JAX/Flax
 # If you run this code on Colab, remember to install flax and optax
 # !pip install --quiet --upgrade flax optax
@@ -28,6 +28,45 @@ import torch.utils.data as data
 # If you run this code on Colab, remember to install pytorch_lightning
 # !pip install --quiet --upgrade pytorch_lightning
 from pytorch_lightning.loggers import TensorBoardLogger, WandbLogger
+
+def append_dict(master_dict, sub_dict):
+    """
+    Append sub-metric dictionary to a master metric dictionary.
+
+    Parameters:
+        master_dict (dict): Master metric dictionary to which sub_dict will be appended.
+        sub_dict (dict): Sub-metric dictionary to be appended to master_dict.
+
+    Returns:
+        dict: Updated master metric dictionary.
+    """
+    for key, value in sub_dict.items():
+        master_dict.setdefault(key, []).append(value)
+    return master_dict
+
+
+def plot_dual_metric_dicts(train_metric_dict, val_metric_dict):
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 5))
+
+    for ax, metric_dict in zip([ax1, ax2], [train_metric_dict, val_metric_dict]):
+        keys = list(metric_dict.keys())
+        metric1, metric2 = metric_dict[keys[0]], metric_dict[keys[1]]
+
+        ax.plot(metric1, label=f"{keys[0]}", color='blue')
+        ax.set_ylabel(f'{keys[0]}', color='blue')
+        ax.tick_params(axis='y', labelcolor='blue')
+
+        ax_twin = ax.twinx()
+        ax_twin.plot(metric2, label=f"{keys[1]}", color='red')
+        ax_twin.set_ylabel(f'{keys[1]}', color='red')
+        ax_twin.tick_params(axis='y', labelcolor='red')
+
+        ax.set_title(f'Metrics')
+        ax.legend(loc='upper left')
+        ax_twin.legend(loc='upper right')
+
+    plt.tight_layout()
+    plt.savefig("./plots/plot.png")
 
 
 class TrainState(train_state.TrainState):
@@ -286,36 +325,50 @@ class TrainerModule(nn.Module):  # why did they define it without nn.Module?
           A dictionary of the train, validation and evt. test metrics for the
           best model on the validation set.
         """
+        train_metric_dict = {}
+        val_metric_dict = {}
         # Create optimizer and the scheduler for the given number of epochs
         self.init_optimizer(num_epochs, len(train_loader))
         # Prepare training loop
         self.on_training_start()
         best_eval_metrics = None
         for epoch_idx in self.tracker(range(1, num_epochs + 1), desc='Epochs'):
-            train_metrics = self.train_epoch(train_loader)
+            train_loss = self.train_epoch(train_loader)
+            self.logger.log_metrics(train_loss, step=epoch_idx)
+            train_metrics = self.eval_model(train_loader, log_prefix='train/')
+            append_dict(train_metric_dict, train_metrics)
             self.logger.log_metrics(train_metrics, step=epoch_idx)
+            self.save_metrics('train', train_metrics)
+            print(f'Epoch {epoch_idx}: Train loss: {train_metrics["train/loss"]:.2f} Train jc: {train_metrics["train/jaccard"]:.2f}\n')
+
             self.on_training_epoch_end(epoch_idx)
             # Validation every N epochs
             if epoch_idx % self.check_val_every_n_epoch == 0:
-                eval_metrics = self.eval_model(val_loader, log_prefix='val/')
-                self.on_validation_epoch_end(epoch_idx, eval_metrics, val_loader)
-                self.logger.log_metrics(eval_metrics, step=epoch_idx)
-                self.save_metrics(f'eval_epoch_{str(epoch_idx).zfill(3)}', eval_metrics)
+                val_metrics = self.eval_model(val_loader, log_prefix='val/')
+                append_dict(val_metric_dict, val_metrics)
+                self.on_validation_epoch_end(epoch_idx, val_metrics, val_loader)
+                self.logger.log_metrics(val_metrics, step=epoch_idx)
+                self.save_metrics(f'eval_epoch_{str(epoch_idx).zfill(3)}', val_metrics)
+
+                print(f'Epoch {epoch_idx}: Val loss: {val_metrics["val/loss"]:.2f} Val jc: {val_metrics["val/jaccard"]:.2f}\n')
                 # Save best model
-                if self.is_new_model_better(eval_metrics, best_eval_metrics):
-                    best_eval_metrics = eval_metrics
+                if self.is_new_model_better(val_metrics, best_eval_metrics):
+                    best_eval_metrics = val_metrics
+                    best_eval_metrics.update(train_loss)
                     best_eval_metrics.update(train_metrics)
                     # self.save_model(step=epoch_idx)
                     # self.save_metrics('best_eval', eval_metrics)
-        # Test best model if possible
+            # Test best model if possible
         if test_loader is not None:
             # self.load_model()
             test_metrics = self.eval_model(test_loader, log_prefix='test/')
             self.logger.log_metrics(test_metrics, step=epoch_idx)
             self.save_metrics('test', test_metrics)
             best_eval_metrics.update(test_metrics)
-        # Close logger
+            print(f'Epoch {epoch_idx}| Test loss: {test_metrics["test/loss"]:.2f}|Test jc: {test_metrics["test/jaccard"]:.2f}\n')
+            # Close logger
         self.logger.finalize('success')
+        plot_dual_metric_dicts(train_metric_dict, val_metric_dict)
         return best_eval_metrics
 
     def train_epoch(self,
