@@ -5,6 +5,7 @@ sys.path.append('../MyEquiVSetFlax')
 import jax
 import datetime
 import os
+import itertools
 import flax
 import flax.linen as nn
 import jax.numpy as jnp
@@ -12,7 +13,9 @@ import numpy as np
 from utils.flax_helper import FF, SigmoidFixedPointLayer, normal_cdf
 import matplotlib
 import matplotlib.pyplot as plt
+
 matplotlib.use('Agg')
+
 
 def cross_entropy(q, S, neg_S):  # Eq. (5) in the paper
     # jax.debug.print("S is {S}\n", S=S)
@@ -44,10 +47,17 @@ def MC_sampling(q, M):  # we should be able to get rid of this step altogether
 
     """
     bs, vs = q.shape
-    q = jnp.broadcast_to(q.reshape(bs, 1, 1, vs), (bs, M, vs, vs))  # .expand(bs, M, vs, vs)
+    # uncomment below for the fully randomized version
+    # q = jnp.broadcast_to(q.reshape(bs, 1, 1, vs), (bs, M, vs, vs))  # a new sample is generated for each coordinate
+
+    # uncomment below for the de-randomized version
+    q = jnp.broadcast_to(q.reshape(bs, 1, vs), (bs, M, vs))  # same sample is used for each coordinate
     # bs = the batch size
-    q = jax.device_put(q)
-    sample_matrix = jax.random.bernoulli(jax.random.PRNGKey(758493), q)  # we should have torch uniform outside
+    q = jax.device_put(q)  # not sure if we need this
+    sample_matrix = jax.random.bernoulli(jax.random.PRNGKey(758493), q)
+
+    # uncomment below for the fully randomized version
+    sample_matrix = jnp.broadcast_to(sample_matrix.reshape(bs, M, 1, vs), (bs, M, vs, vs))
 
     mask = jnp.expand_dims(jnp.concatenate([jnp.expand_dims(jnp.eye(vs, vs), axis=0) for _ in range(M)], axis=0),
                            axis=0)
@@ -55,9 +65,14 @@ def MC_sampling(q, M):  # we should be able to get rid of this step altogether
     # after the first unsqueeze we have a 3D tensor with 1 channel, vs rows, and vs columns
     # after concat we have a 3D tensor with M channels, vs rows, and vs columns
     # after the second unsqueeze we have a (1, M, vs, vs) shaped tensor
+    # q and sample_matrix are (bs, M, vs, vs) shaped
+    # mask is (1, M, vs, vs) shaped
     matrix_0 = sample_matrix * (1 - mask)  # element_wise multiplication
     matrix_1 = matrix_0 + mask
-    return matrix_1, matrix_0  # F([x]_+i), F([x]_- i)
+    # print(matrix_0)
+    # print(matrix_1)
+    # print(sample_matrix)
+    return matrix_1, matrix_0, sample_matrix  # F([x]_+i), F([x]_- i)
 
 
 # noinspection PyAttributeOutsideInit
@@ -84,7 +99,8 @@ class SetFunction(nn.Module):  # nn.Module is the base class for all NN modules.
         return nn.Dense(features=self.dim_feature)
 
     def mean_field_iteration(self, V, subset_i, subset_not_i):  # ψ_i in the paper, I can call this as a layer
-        q = jax.nn.sigmoid((self.grad_F_S(V, subset_i, subset_not_i)).mean(1))
+        # print((self.grad_F_S(V, subset_i, subset_not_i)).mean(1).shape)
+        q = jax.nn.sigmoid(self.grad_F_S(V, subset_i, subset_not_i))
         return q
 
     def __call__(self, V, S, neg_S, **kwargs):
@@ -94,7 +110,7 @@ class SetFunction(nn.Module):  # nn.Module is the base class for all NN modules.
         # q = jax.random.uniform(jax.random.PRNGKey(758493), shape=(bs, vs))
 
         for i in range(self.params['RNN_steps']):  # MFVI K times where K = RNN_steps
-            sample_matrix_1, sample_matrix_0 = MC_sampling(q, self.params['num_samples'])  # returns S+i , S
+            sample_matrix_1, sample_matrix_0, _ = MC_sampling(q, self.params['num_samples'])  # returns S+i , S
             q = self.mean_field_iteration(V, sample_matrix_1, sample_matrix_0)  # ψ, ∇f^{Fθ}(ψ), Eq. 11
 
         # q = SigmoidFixedPointLayer(self.grad_F_S, MC_sampling, num_samples=self.params['num_samples'])(q)
@@ -139,30 +155,62 @@ class SetFunction(nn.Module):  # nn.Module is the base class for all NN modules.
         # print(subset_mat.shape)  # (bs, M, vs, vs)
         # print(fea.shape)  # (bs, 1, vs, dim_feature)
         fea = subset_mat @ fea
-        fea = self.ff(fea)  # goes thru FF block
+        # print(fea.shape)
+        fea = self.ff(fea)  # goes through FF block
         # self.ff.apply(params, fea)
+        # print(fea.shape)
         return fea
 
-    # def multilinear_relaxation(F_S, y):
-    #     out = 0.0
-    #     for i in range(2 ** len(y)):
-    #         binary_vector = map(int, list(bin(i)[2:]))
-    #         if len(binary_vector) < len(y):
-    #             binary_vector = [0] * (len(y) - len(binary_vector)) + binary_vector
-    #         x = dict(zip(y.iterkeys(), binary_vector))
-    #         new_term = F_S(x)
-    #         for key in y:
-    #             if x[key] == 0:
-    #                 new_term *= (1.0 - y[key])
-    #             else:
-    #                 new_term *= y[key]
-    #         out += new_term
-    #     return out
+    def get_powerset(self, V):
+        bs, vs = V.shape[:2]
+        powerset = jnp.array(list(itertools.product([0, 1], repeat=vs)))
+        powerset = jnp.concatenate([jnp.expand_dims(powerset, axis=0) for _ in range(bs)], axis=0)
+        return powerset
+
+    def multilinear_relaxation(self, V, powerset, q):
+        bs, subsets, vs = powerset.shape
+        expanded_powerset = jnp.broadcast_to(powerset.reshape(bs, subsets, 1, vs), (bs, subsets, vs, vs))
+        fea = self.F_S(V, expanded_powerset, fpi=True).squeeze(-1)
+        q = jnp.broadcast_to(q.reshape(bs, 1, vs), (bs, subsets, vs))
+        # print(fea.shape)
+        # print(q)
+        probs = ((1 - powerset) + powerset * q) * (powerset + (1 - powerset) * (1 - q))
+        probs = jnp.prod(probs, axis=-1)
+        # print(probs.shape)
+        # print(fea.mean(-1).shape)
+        return jnp.sum(fea.mean(-1) * probs, axis=-1)
 
     def grad_F_S(self, V, subset_i, subset_not_i):
         F_1 = self.F_S(V, subset_i, fpi=True).squeeze(-1)
         F_0 = self.F_S(V, subset_not_i, fpi=True).squeeze(-1)
-        return F_1 - F_0
+        return (F_1 - F_0).mean(1)
+
+    # def get_q_i(self, q):  # we should be able to get rid of this step altogether
+    #     """
+    #     Args:
+    #         q: parameter of Bernoulli distribution (ψ in the paper)
+    #
+    #     Returns:
+    #         Sampled subsets F(S+i), F(S)
+    #
+    #     """
+    #     bs, vs = q.shape
+    #     subsets =  2 ** vs
+    #     q = jnp.broadcast_to(q.reshape(bs, 1, 1, vs), (bs, subsets, vs, vs))
+    #     mask = jnp.expand_dims(jnp.concatenate([jnp.expand_dims(jnp.eye(vs, vs), axis=0) for _ in range(subsets)], axis=0),
+    #                            axis=0)
+    #
+    #     q_not_i = q * (1 - mask)  # element_wise multiplication
+    #     q_i = q_not_i + mask
+    #     # print(matrix_0)
+    #     # print(matrix_1)
+    #     return q_i, q_not_i  # F([x]_+i), F([x]_- i)
+    #
+    # def true_grad(self, V, q_i, q_not_i):
+    #     powerset = self.get_powerset(V)
+    #     F_1 = self.multilinear_relaxation(V, powerset, q_i)
+    #     F_0 = self.multilinear_relaxation(V, powerset, q_not_i)
+    #     return F_1 - F_0
 
     def hess_F_S(self, V, subset_ij, subset_i_not_j, subset_j_not_i, subset_not_ij):
         # one more squeeze might be necessary
@@ -288,9 +336,9 @@ class RecNet(nn.Module):  # this is only used for 'ind' or 'copula' modes
 
 
 if __name__ == "__main__":
-    params = {'v_size': 30, 's_size': 10, 'num_layers': 2, 'batch_size': 4, 'lr': 0.0001, 'weight_decay': 1e-5,
+    params = {'v_size': 30, 's_size': 10, 'num_layers': 2, 'batch_size': 1, 'lr': 0.0001, 'weight_decay': 1e-5,
               'init': 0.05, 'clip': 10, 'epochs': 100, 'num_runs': 1, 'num_bad_epochs': 6, 'num_workers': 2,
-              'RNN_steps': 1, 'num_samples': 5}
+              'RNN_steps': 1, 'num_samples': 100}
 
     rng = jax.random.PRNGKey(42)
     rng, V_inp_rng, S_inp_rng, neg_S_inp_rng, rec_net_inp_rng, init_rng = jax.random.split(rng, 6)
@@ -307,27 +355,43 @@ if __name__ == "__main__":
     new_params = mySetModel.init(init_rng, V_inp, S_inp, neg_S_inp)
     # print(new_params)
 
-    layer = SigmoidFixedPointLayer(set_func=mySetModel, samp_func=MC_sampling, num_samples=params['num_samples'])
-    rng, X_rng = jax.random.split(rng, 2)
-    variables = layer.init(jax.random.key(0), jnp.ones((4, 30)), V_inp)
-    all_iterations = []
-    for X_rng in range(100):
-        X = jax.random.normal(jax.random.key(X_rng), (4, 30))
-        Z, iterations, err, errs = layer.apply(variables, X, V_inp)
-        print(f"Terminated after {iterations} iterations with error {err}")
-        all_iterations.append(iterations)
+    V_inp = jax.random.normal(V_inp_rng, (1, 5, 2))  # Batch size 4, input size (V) 100, dim_input 2
+    powerset = mySetModel.get_powerset(V_inp)
+    # print(powerset)
+    bs, vs = V_inp.shape[:2]
+    q = .5 * jnp.ones((bs, vs))
+    multilin = mySetModel.apply(new_params, V_inp, powerset, q, method="multilinear_relaxation")
+    print(multilin)
+    # q_i, q_not_i = mySetModel.get_q_i(q)
+    # true_multilin_grad = mySetModel.apply(new_params, V_inp, q_i, q_not_i, method="true_grad")
+    # print(true_multilin_grad)
+    subset_i, subset_not_i, subset_mat = MC_sampling(q, 10000)
+    # print(subset_mat)
+    F_S = mySetModel.apply(new_params, V_inp, subset_mat, fpi=True,  method="F_S")
+    print(F_S.squeeze(-1).mean(1).mean(-1))
 
-        plt.figure()
-        plt.plot(range(iterations), errs)
-        plt.xlabel(f'fixed point iterations for X_rng={X_rng}')
-        plt.ylabel(r'$|q - q_{next}|$')
-        plt.title(r'Difference between fixed point iterations')
-        plt.show()
-        plot_path = f'plots/early_stop/test_{X_rng}'
-        while os.path.isfile(f'{plot_path}.png'):
-            plot_path += '+'
-        plt.savefig(f'{plot_path}.png', bbox_inches="tight")
-        plt.close()
-
-    print(f"On average, fixed-point iterations are terminated after {sum(all_iterations)/len(all_iterations):.2f} iterations.")
+    # layer = SigmoidFixedPointLayer(set_func=mySetModel, samp_func=MC_sampling, num_samples=params['num_samples'])
+    # rng, X_rng = jax.random.split(rng, 2)
+    # variables = layer.init(jax.random.key(0), jnp.ones((4, 30)), V_inp)
+    # all_iterations = []
+    # for X_rng in range(100):
+    #     X = jax.random.normal(jax.random.key(X_rng), (4, 30))
+    #     Z, iterations, err, errs = layer.apply(variables, X, V_inp)
+    #     print(f"Terminated after {iterations} iterations with error {err}")
+    #     all_iterations.append(iterations)
+    #
+    #     plt.figure()
+    #     plt.plot(range(iterations), errs)
+    #     plt.xlabel(f'fixed point iterations for X_rng={X_rng}')
+    #     plt.ylabel(r'$|q - q_{next}|$')
+    #     plt.title(r'Difference between fixed point iterations')
+    #     plt.show()
+    #     plot_path = f'plots/early_stop/test_{X_rng}'
+    #     while os.path.isfile(f'{plot_path}.png'):
+    #         plot_path += '+'
+    #     plt.savefig(f'{plot_path}.png', bbox_inches="tight")
+    #     plt.close()
+    #
+    # print(
+    #     f"On average, fixed-point iterations are terminated after {sum(all_iterations) / len(all_iterations):.2f} iterations.")
     # subset_i, subset_not_i = mySet.MC_sampling(q, 500)

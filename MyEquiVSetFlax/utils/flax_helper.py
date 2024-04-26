@@ -61,7 +61,6 @@ class SigmoidFixedPointLayer(nn.Module):
     tol: float = 1e-3
     max_iter: int = 100
 
-
     def __call__(self, x, V, **kwargs):
         # initialize output q to be 0.5
         # bs, vs = x.shape
@@ -95,6 +94,7 @@ class SigmoidFixedPointLayer(nn.Module):
 
 
 # noinspection PyAttributeOutsideInit
+# feed forward
 class FF(nn.Module):
     dim_input: int
     dim_hidden: int
