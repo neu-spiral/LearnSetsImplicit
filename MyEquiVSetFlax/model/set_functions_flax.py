@@ -185,6 +185,14 @@ class SetFunction(nn.Module):  # nn.Module is the base class for all NN modules.
         F_0 = self.F_S(V, subset_not_i, fpi=True).squeeze(-1)
         return (F_1 - F_0).mean(1)
 
+    def estimate_grad_F_S(self, V, subset_mat, delta):
+        bs, M, vs = subset_mat.shape[:-1]
+        mask = jnp.expand_dims(jnp.concatenate([jnp.expand_dims(jnp.eye(vs, vs), axis=0) for _ in range(M)], axis=0),
+                           axis=0)
+        F_delta = self.F_S(V, subset_mat + mask * delta, fpi=True).squeeze(-1)
+        F = self.F_S(V, subset_mat, fpi=True).squeeze(-1)
+        return (F_delta - F).mean(1) / delta
+
     # def get_q_i(self, q):  # we should be able to get rid of this step altogether
     #     """
     #     Args:
