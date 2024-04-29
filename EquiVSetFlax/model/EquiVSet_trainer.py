@@ -109,7 +109,10 @@ class EquiVSetTrainer(TrainerModule):
         def eval_step(state, batch):
             loss = entropy_loss(state.params, batch)
             loss = jnp.reshape(loss, (-1,))
-            V_set, S_set, neg_S_set = batch
+            if len(batch) == 3:
+                V_set, S_set, neg_S_set = batch
+            elif len(batch) == 2:
+                V_set, S_set = batch
 
             q = inference(state, V_set, S_set.shape[0])
             # idx = jnp.argpartition(q, -S_set.shape[-1], axis=1)  # [-S_set.shape[-1]:]

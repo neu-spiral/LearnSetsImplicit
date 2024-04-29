@@ -45,28 +45,28 @@ def append_dict(master_dict, sub_dict):
     return master_dict
 
 
-def plot_dual_metric_dicts(train_metric_dict, val_metric_dict):
+def plot_dual_metric_dicts(train_metric_dict, val_metric_dict, dataset):
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 5))
 
-    for ax, metric_dict in zip([ax1, ax2], [train_metric_dict, val_metric_dict]):
+    for line_style, ax, metric_dict in zip(['-','--'], [ax1, ax2], [train_metric_dict, val_metric_dict]):
         keys = list(metric_dict.keys())
         metric1, metric2 = metric_dict[keys[0]], metric_dict[keys[1]]
 
-        ax.plot(metric1, label=f"{keys[0]}", color='blue')
-        ax.set_ylabel(f'{keys[0]}', color='blue')
-        ax.tick_params(axis='y', labelcolor='blue')
+        ax1.plot(metric1, line_style, label=f"{keys[0]}")
+        # ax.set_ylabel(f'{keys[0]}', color='blue')
+        # ax.tick_params(axis='y', labelcolor='blue')
 
-        ax_twin = ax.twinx()
-        ax_twin.plot(metric2, label=f"{keys[1]}", color='red')
-        ax_twin.set_ylabel(f'{keys[1]}', color='red')
-        ax_twin.tick_params(axis='y', labelcolor='red')
+        # ax_twin = ax.twinx()
+        ax2.plot(metric2, line_style, label=f"{keys[1]}")
+        # ax_twin.set_ylabel(f'{keys[1]}', color='red')
+        # ax_twin.tick_params(axis='y', labelcolor='red')
 
-        ax.set_title(f'Metrics')
-        ax.legend(loc='upper left')
-        ax_twin.legend(loc='upper right')
-
+        # ax.set_title(f'Metrics')
+        ax1.legend(loc='upper left')
+        ax2.legend(loc='upper right')
+    plt.title(f'{dataset}')
     plt.tight_layout()
-    plt.savefig("./plots/plot.png")
+    plt.savefig(f"./plots/plot_{dataset}.png")
 
 
 class TrainState(train_state.TrainState):
@@ -368,7 +368,7 @@ class TrainerModule(nn.Module):  # why did they define it without nn.Module?
             print(f'Epoch {epoch_idx}| Test loss: {test_metrics["test/loss"]:.2f}|Test jc: {test_metrics["test/jaccard"]:.2f}\n')
             # Close logger
         self.logger.finalize('success')
-        plot_dual_metric_dicts(train_metric_dict, val_metric_dict)
+        plot_dual_metric_dicts(train_metric_dict, val_metric_dict, self.model_hparams['params']['data_name'])
         return best_eval_metrics
 
     def train_epoch(self,
