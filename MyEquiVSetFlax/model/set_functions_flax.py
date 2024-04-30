@@ -363,43 +363,64 @@ if __name__ == "__main__":
     new_params = mySetModel.init(init_rng, V_inp, S_inp, neg_S_inp)
     # print(new_params)
 
-    V_inp = jax.random.normal(V_inp_rng, (1, 5, 2))  # Batch size 4, input size (V) 100, dim_input 2
-    powerset = mySetModel.get_powerset(V_inp)
-    # print(powerset)
-    bs, vs = V_inp.shape[:2]
-    q = .5 * jnp.ones((bs, vs))
-    multilin = mySetModel.apply(new_params, V_inp, powerset, q, method="multilinear_relaxation")
-    print(multilin)
-    # q_i, q_not_i = mySetModel.get_q_i(q)
-    # true_multilin_grad = mySetModel.apply(new_params, V_inp, q_i, q_not_i, method="true_grad")
-    # print(true_multilin_grad)
-    subset_i, subset_not_i, subset_mat = MC_sampling(q, 10000)
-    # print(subset_mat)
-    F_S = mySetModel.apply(new_params, V_inp, subset_mat, fpi=True,  method="F_S")
-    print(F_S.squeeze(-1).mean(1).mean(-1))
-
-    # layer = SigmoidFixedPointLayer(set_func=mySetModel, samp_func=MC_sampling, num_samples=params['num_samples'])
-    # rng, X_rng = jax.random.split(rng, 2)
-    # variables = layer.init(jax.random.key(0), jnp.ones((4, 30)), V_inp)
-    # all_iterations = []
-    # for X_rng in range(100):
-    #     X = jax.random.normal(jax.random.key(X_rng), (4, 30))
-    #     Z, iterations, err, errs = layer.apply(variables, X, V_inp)
-    #     print(f"Terminated after {iterations} iterations with error {err}")
-    #     all_iterations.append(iterations)
-    #
+    # for v_size in range(1, 17):
+    #     V_inp = jax.random.normal(V_inp_rng, (1, v_size, 2))  # Batch size 4, input size (V) 100, dim_input 2
+    #     powerset = mySetModel.get_powerset(V_inp)
+    #     # print(powerset)
+    #     bs, vs = V_inp.shape[:2]
+    #     q = .5 * jnp.ones((bs, vs))
+    #     multilin = mySetModel.apply(new_params, V_inp, powerset, q, method="multilinear_relaxation")
+    #     # print(multilin)
+    #     # q_i, q_not_i = mySetModel.get_q_i(q)
+    #     # true_multilin_grad = mySetModel.apply(new_params, V_inp, q_i, q_not_i, method="true_grad")
+    #     # print(true_multilin_grad)
+    #     errs = []
+    #     for num_samples in [1, 10, 100, 1000, 10000]:
+    #         subset_i, subset_not_i, subset_mat = MC_sampling(q, num_samples)
+    #         # print(subset_mat)
+    #         F_S = mySetModel.apply(new_params, V_inp, subset_mat, fpi=True,  method="F_S")
+    #         F_S = F_S.squeeze(-1).mean(1).mean(-1)
+    #         # print(F_S)
+    #         err = jnp.linalg.norm(multilin - F_S)
+    #         print(err)
+    #         errs.append(err)
     #     plt.figure()
-    #     plt.plot(range(iterations), errs)
-    #     plt.xlabel(f'fixed point iterations for X_rng={X_rng}')
-    #     plt.ylabel(r'$|q - q_{next}|$')
-    #     plt.title(r'Difference between fixed point iterations')
+    #     plt.xscale("log")
+    #     plt.plot([1, 10, 100, 1000, 10000], errs)
+    #     plt.xlabel(f'# of samples (log)')
+    #     plt.ylabel(r'$|\tilde{F} (\boldsymbol{\psi}, \boldsymbol{\theta}) - '
+    #                r'\hat{\tilde{F}} (\boldsymbol{\psi}, \boldsymbol{\theta})|$')
+    #     plt.title(r'Difference between the true multilinear relaxation and its estimation')
     #     plt.show()
-    #     plot_path = f'plots/early_stop/test_{X_rng}'
+    #     plot_path = f'plots/tests/multilin/V_size_{v_size}'
     #     while os.path.isfile(f'{plot_path}.png'):
     #         plot_path += '+'
     #     plt.savefig(f'{plot_path}.png', bbox_inches="tight")
     #     plt.close()
-    #
-    # print(
-    #     f"On average, fixed-point iterations are terminated after {sum(all_iterations) / len(all_iterations):.2f} iterations.")
+
+    layer = SigmoidFixedPointLayer(set_func=mySetModel, samp_func=MC_sampling, num_samples=params['num_samples'])
+    rng, X_rng = jax.random.split(rng, 2)
+    variables = layer.init(jax.random.key(0), jnp.ones((4, 30)), V_inp)
+    all_iterations = []
+    for X_rng in range(40):
+        X = jax.random.normal(jax.random.key(X_rng), (4, 30))
+        Z, iterations, err, errs = layer.apply(variables, X, V_inp)
+        print(f"Terminated after {iterations} iterations with error {err}")
+        all_iterations.append(iterations)
+
+        plt.figure()
+        plt.yscale("log")
+        plt.plot(range(iterations), errs)
+        plt.xlabel(f'fixed point iterations for X_rng={X_rng}')
+        plt.ylabel(r'$|q - q_{next}|$')
+        plt.title(r'Difference between fixed point iterations')
+        plt.show()
+        plot_path = f'plots/early_stop/test_{X_rng}'
+        while os.path.isfile(f'{plot_path}.png'):
+            plot_path += '+'
+        plt.savefig(f'{plot_path}.png', bbox_inches="tight")
+        plt.close()
+
+    print(
+        f"On average, fixed-point iterations are terminated after {sum(all_iterations) / len(all_iterations):.2f} iterations.")
     # subset_i, subset_not_i = mySet.MC_sampling(q, 500)

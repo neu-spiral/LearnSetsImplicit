@@ -29,31 +29,6 @@ def get_init_function(init_value):
     return init_function
 
 
-# no need for flax
-def move_to_device(obj, device):
-    if torch.is_tensor(obj):
-        return obj.to(device)
-    elif isinstance(obj, dgl.DGLGraph):
-        return obj.to(device)
-    elif isinstance(obj, dict):
-        res = {}
-        for k, v in obj.items():
-            res[k] = move_to_device(v, device)
-        return res
-    elif isinstance(obj, list):
-        res = []
-        for v in obj:
-            res.append(move_to_device(v, device))
-        return res
-    elif isinstance(obj, tuple):
-        res = ()
-        for v in obj:
-            res += (move_to_device(v, device),)
-        return res
-    else:
-        raise TypeError("Invalid type for move_to_device")
-
-
 class SigmoidFixedPointLayer(nn.Module):
     set_func: Callable
     samp_func: Callable
@@ -70,7 +45,7 @@ class SigmoidFixedPointLayer(nn.Module):
         errs = []
         last_err = float('inf')
 
-        subset_i, subset_not_i = self.samp_func(q, self.num_samples)
+        subset_i, subset_not_i, _ = self.samp_func(q, self.num_samples)
         key = jax.random.key(42)
         V_dummy = jnp.ones(shape=V.shape)
         s1_dummy = jnp.ones(shape=subset_i.shape)
@@ -79,9 +54,9 @@ class SigmoidFixedPointLayer(nn.Module):
 
         # iterate until convergence
         while iterations < self.max_iter:
-            subset_i, subset_not_i = self.samp_func(q, self.num_samples)
+            subset_i, subset_not_i, _ = self.samp_func(q, self.num_samples)
             grad_set_func = self.set_func.apply(init_params, V, subset_i, subset_not_i, method='grad_F_S')
-            q_next = jax.nn.sigmoid(grad_set_func.mean(1))
+            q_next = jax.nn.sigmoid(grad_set_func)
             err = jnp.linalg.norm(q - q_next)
             errs.append(err)
             q = q_next
