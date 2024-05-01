@@ -121,7 +121,10 @@ class TrainerModule(nn.Module):  # why did they define it without nn.Module?
         # Set of hyperparameters to save
         self.config = {
             'model_class': model_class.__name__,
-            'model_hparams': model_hparams,
+            'model_hparams': {
+                'params': vars(model_hparams['params']),  # Convert Namespace to dictionary
+                'dim_feature': model_hparams['dim_feature']
+            },
             'optimizer_hparams': optimizer_hparams,
             'logger_params': logger_params,
             'enable_progress_bar': self.enable_progress_bar,
@@ -368,7 +371,7 @@ class TrainerModule(nn.Module):  # why did they define it without nn.Module?
             print(f'Epoch {epoch_idx}| Test loss: {test_metrics["test/loss"]:.2f}|Test jc: {test_metrics["test/jaccard"]:.2f}\n')
             # Close logger
         self.logger.finalize('success')
-        plot_dual_metric_dicts(train_metric_dict, val_metric_dict, self.model_hparams['params']['data_name'])
+        plot_dual_metric_dicts(train_metric_dict, val_metric_dict, self.model_hparams['params'].data_name)
         return best_eval_metrics
 
     def train_epoch(self,

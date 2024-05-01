@@ -32,10 +32,29 @@ from torchvision import transforms
 from pytorch_lightning.loggers import TensorBoardLogger, WandbLogger
 
 from model.EquiVSet_trainer import EquiVSetTrainer
-from data_loader import TwoMoons, GaussianMixture
+from data_loader import TwoMoons, GaussianMixture,Amazon, CelebA, SetPDBBind, SetBindingDB
+import utils.config as config_file
+
 # jax.config.update("jax_debug_nans", True)  # stops execution when nan occurs
 jax.config.update("jax_enable_x64", True)  # solves the nan value issue when calculating q, hence loss
 
+
+def get_data(params):
+    data_name = params.data_name
+    if data_name == 'moons':
+        return TwoMoons(params)
+    elif data_name == 'gaussian':
+        return GaussianMixture(params)
+    elif data_name == 'amazon':
+        return Amazon(params)
+    elif data_name == 'celeba':
+        return CelebA(params)
+    elif data_name == 'pdbbind':
+        return SetPDBBind(params)
+    elif data_name == 'bindingdb':
+        return SetBindingDB(params)
+    else:
+        raise ValueError("Invalid data_name. Supported options are: 'moons', 'gaussian', 'amazon', 'celeba', 'pdbbind', 'bindingdb'")
 
 def parse_arguments():
     parser = argparse.ArgumentParser()
@@ -96,27 +115,22 @@ def parse_arguments():
 
 def set_params(args):
     config_name = args.data_name.upper() + '_CONFIG'
-    config = globals().get(config_name)
+    config = getattr(config_file, config_name)
+    print(f'getting config:{config}')
     if config:
+        print(f'config set to {args.data_name.upper()}_CONFIG')
         args.v_size = config.get('v_size', args.v_size)
         args.s_size = config.get('s_size', args.s_size)
+        args.batch_size = config.get('batch_size', args.batch_size)
     return args
 
 
 if __name__ == "__main__":
-    args = parse_arguments()
-    if not args.manual_params:
-        params = set_params(args)
-    print("Arguments:", args)
-
-    # params = {'data_name': 'MixGaussian', 'root_path': './', 'v_size': 100, 's_size': 10, 'num_layers': 2, 'batch_size': 128,
-    #           'lr': 0.0001, 'weight_decay': 1e-5, 'init': 0.05, 'clip': 10, 'epochs': 100, 'num_bad_epochs': 6,
-    #           'num_runs': 1, 'num_workers': 2, 'seed': 50971, 'mode': 'diffMF', 'RNN_steps': 1, 'num_samples': 5,
-    #           'rank': 5, 'tau': 0.1, 'neg_num': 1}
-
-    # get data
-    # data = TwoMoons(params)
-    data = GaussianMixture(params)
+    params = parse_arguments()
+    if not params.manual_params:
+        params = set_params(params)
+    print("Current Arguments:", vars(params))
+    data = get_data(params)
     CHECKPOINT_PATH = '../checkpoints/'
     batch_size = params.batch_size
     num_workers = params.num_workers

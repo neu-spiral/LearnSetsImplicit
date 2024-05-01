@@ -66,8 +66,8 @@ class SetDataset(Dataset):
         self.data = V
         self.labels = S
         self.is_train = is_train
-        self.neg_num = params['neg_num']
-        self.v_size = params['v_size']
+        self.neg_num = params.neg_num
+        self.v_size = params.v_size
         self.transform = transform
 
     def __getitem__(self, index):

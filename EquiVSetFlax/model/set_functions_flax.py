@@ -69,7 +69,7 @@ class SetFunction(nn.Module):  # nn.Module is the base class for all NN modules.
     # recommended to use the setup version.
     def setup(self):
         self.init_layer = self.define_init_layer()
-        self.ff = FF(self.dim_feature, 500, 1, self.params['num_layers'])
+        self.ff = FF(self.dim_feature, 500, 1, self.params.num_layers)
 
     def define_init_layer(self):
         """
@@ -88,8 +88,8 @@ class SetFunction(nn.Module):  # nn.Module is the base class for all NN modules.
         q = .5 * jnp.ones((bs, vs))  # ψ_0 <-- 0.5 * vector(1)
         # q = jax.random.uniform(jax.random.PRNGKey(758493), shape=(bs, vs))
 
-        for i in range(self.params['RNN_steps']):  # MFVI K times where K = RNN_steps
-            sample_matrix_1, sample_matrix_0 = MC_sampling(q, self.params['num_samples'])
+        for i in range(self.params.RNN_steps):  # MFVI K times where K = RNN_steps
+            sample_matrix_1, sample_matrix_0 = MC_sampling(q, self.params.num_samples)
             q = self.mean_field_iteration(V, sample_matrix_1, sample_matrix_0)  # ψ
 
         loss = cross_entropy(q, S, neg_S)
