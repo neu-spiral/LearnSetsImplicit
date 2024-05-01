@@ -79,8 +79,6 @@ class SetFunction(nn.Module):  # nn.Module is the base class for all NN modules.
 
     def forward(self, V, S, neg_S, rec_net):  # return cross-entropy loss
         if self.params.mode == 'diffMF':
-            print(S.shape)
-            print(neg_S.shape)
             bs, vs = V.shape[:2]
             q = .5 * torch.ones(bs, vs).to(V.device)  # ψ_0 <-- 0.5 * vector(1)
         else:

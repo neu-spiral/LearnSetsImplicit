@@ -92,8 +92,8 @@ class EquiVSetTrainer(TrainerModule):
             bs, vs = V.shape[:2]
             q = .5 * jnp.ones((bs, vs))
 
-            for i in range(self.model_hparams['params']['RNN_steps']):
-                sample_matrix_1, sample_matrix_0 = MC_sampling(q, self.model_hparams['params']['num_samples'])
+            for i in range(self.model_hparams['params'].RNN_steps):
+                sample_matrix_1, sample_matrix_0 = MC_sampling(q, self.model_hparams['params'].num_samples)
                 q = self.model.apply({'params': state.params}, V, sample_matrix_1, sample_matrix_0, method='mean_field_iteration')
             return q
 
@@ -127,7 +127,7 @@ class EquiVSetTrainer(TrainerModule):
                 pre_mask = jnp.zeros([S_set.shape[-1]])
                 # print(np.array(jnp.sum(S_set[i])))
                 # call(lambda x: print(f"sum is {x}"), jnp.sum(S_set[i]))
-                ids = idx[i][:self.model_hparams['params']['s_size']]  # this needs static slicing
+                ids = idx[i][:self.model_hparams['params'].s_size]  # this needs static slicing
                 pre_mask = pre_mask.at[ids].set(1)
                 pre_list.append(jnp.expand_dims(pre_mask, axis=0))
             pre_mask = jnp.concatenate(pre_list, axis=0)

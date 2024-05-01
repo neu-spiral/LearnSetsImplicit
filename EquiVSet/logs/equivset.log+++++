@@ -1,0 +1,39 @@
+EquiVSet(
+  (set_func): SetFunction(
+    (init_layer): Linear(in_features=2, out_features=256, bias=True)
+    (ff): FF(
+      (stack): ModuleList(
+        (0): Sequential(
+          (0): Linear(in_features=256, out_features=500, bias=True)
+          (1): ReLU()
+        )
+        (1): Sequential(
+          (0): Linear(in_features=500, out_features=500, bias=True)
+          (1): ReLU()
+        )
+      )
+      (out): Linear(in_features=500, out_features=1, bias=True)
+    )
+  )
+)
+#params: 380269
+hparams: equivset --data_name moons --amazon_cat toys --root_path ./ --train --v_size 100 --s_size 10 --num_layers 2 --batch_size 128 --lr 0.0001 --weight_decay 1e-05 --init 0.05 --clip 10 --epochs 100 --num_bad_epochs 6 --num_workers 2 --cuda --seed 50971 --mode diffMF --RNN_steps 1 --num_samples 5 --rank 5 --tau 0.1 --neg_num 1
+End of epoch   1 | neg_elbo     0.00  | entropy    11.98 | train perf    46.43 | val perf    47.73		*Best model so far, deep copying*
+End of epoch   2 | neg_elbo     0.00  | entropy    10.80 | train perf    48.55 | val perf    49.83		*Best model so far, deep copying*
+End of epoch   3 | neg_elbo     0.00  | entropy     9.91 | train perf    51.26 | val perf    52.76		*Best model so far, deep copying*
+End of epoch   4 | neg_elbo     0.00  | entropy     9.25 | train perf    54.01 | val perf    55.52		*Best model so far, deep copying*
+End of epoch   5 | neg_elbo     0.00  | entropy     8.69 | train perf    56.52 | val perf    57.94		*Best model so far, deep copying*
+End of epoch   6 | neg_elbo     0.00  | entropy     8.25 | train perf    57.56 | val perf    58.97		*Best model so far, deep copying*
+End of epoch   7 | neg_elbo     0.00  | entropy     7.86 | train perf    57.50 | val perf    58.65		Bad epoch 1
+End of epoch   8 | neg_elbo     0.00  | entropy     7.56 | train perf    57.06 | val perf    58.50		Bad epoch 2
+End of epoch   9 | neg_elbo     0.00  | entropy     7.31 | train perf    57.27 | val perf    58.43		Bad epoch 3
+End of epoch  10 | neg_elbo     0.00  | entropy     7.10 | train perf    57.16 | val perf    58.47		Bad epoch 4
+End of epoch  11 | neg_elbo     0.00  | entropy     6.93 | train perf    57.30 | val perf    58.15		Bad epoch 5
+End of epoch  12 | neg_elbo     0.00  | entropy     6.79 | train perf    57.17 | val perf    58.12		Bad epoch 6
+End of epoch  13 | neg_elbo     0.00  | entropy     6.67 | train perf    57.11 | val perf    58.24		Bad epoch 7
+time per training epoch: 0:00:00.640398
+----New best    58.97, saving
+Time: 0:00:28
+Train:     57.63
+Val:     58.83
+Test:    58.61

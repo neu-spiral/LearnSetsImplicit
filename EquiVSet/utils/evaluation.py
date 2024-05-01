@@ -5,8 +5,13 @@ from utils.pytorch_helper import set_value_according_index, move_to_device
 def compute_metrics(loader, infer_func, v_size, device):
     jc_list = []
     for batch_num, batch in enumerate(loader):
-        V_set, S_set = move_to_device(batch, device)
-        
+
+        output = move_to_device(batch, device)
+        if len(output) == 2:
+            V_set, S_set = output
+        else:
+            V_set, S_set, neg_S_set = output
+
         q = infer_func(V_set, S_set.shape[0])
         _, idx = torch.topk(q, S_set.shape[-1], dim=1, largest=True)
 

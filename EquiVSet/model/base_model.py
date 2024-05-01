@@ -75,7 +75,8 @@ class Base_Model(nn.Module):
             if self.hparams.auto_repar == False:
                 logger.log_test_perfs(test_perfs, self.hparams)
 
-        val_perf, test_perf = self.run_test()
+        train_perf, val_perf, test_perf = self.run_test()
+        logger.log('Train:  {:8.2f}'.format(train_perf))
         logger.log('Val:  {:8.2f}'.format(val_perf))
         logger.log('Test: {:8.2f}'.format(test_perf))
 
@@ -159,11 +160,13 @@ class Base_Model(nn.Module):
                     logger.log('Stopping training session because loss is NaN')
                     break
 
+                train_perf = self.evaluate(train_loader, device)
                 val_perf = self.evaluate(val_loader, device)
                 logger.log('End of epoch {:3d}'.format(epoch), False)
                 logger.log(' '.join([' | {:s} {:8.2f}'.format(
                     key, forward_sum[key] / num_steps)
                     for key in forward_sum]), False)
+                logger.log(' | train perf {:8.2f}'.format(train_perf), False)
                 logger.log(' | val perf {:8.2f}'.format(val_perf), False)
 
                 if val_perf > best_val_perf:
@@ -195,11 +198,12 @@ class Base_Model(nn.Module):
 
     def run_test(self):
         device = torch.device('cuda' if self.hparams.cuda else 'cpu')
-        _, val_loader, test_loader = self.data.get_loaders(self.hparams.batch_size,
+        train_loader, val_loader, test_loader = self.data.get_loaders(self.hparams.batch_size,
                                                            self.hparams.num_workers, shuffle_train=True, get_test=True)
+        train_perf = self.evaluate(train_loader, device)
         val_perf = self.evaluate(val_loader, device)
         test_perf = self.evaluate(test_loader, device)
-        return val_perf, test_perf
+        return train_perf, val_perf, test_perf
 
     def load(self):
         device = torch.device('cuda' if self.hparams.cuda else 'cpu')
