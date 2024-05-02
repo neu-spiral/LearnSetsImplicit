@@ -10,6 +10,7 @@ from tqdm import tqdm
 from torchvision import transforms
 from torch.utils.data import Dataset, DataLoader
 
+
 image_size = 64
 img_transform = transforms.Compose([
     transforms.Resize(image_size),
@@ -18,7 +19,7 @@ img_transform = transforms.Compose([
     transforms.Normalize(mean=[0.5, 0.5, 0.5],
                           std=[0.5, 0.5, 0.5])
 ])
-img_root_path = './root/dataset/celeba/img_align_celeba/'
+img_root_path = './dataset/celeba/img_align_celeba/'
 
 class Data:
     def __init__(self, params):
@@ -43,7 +44,7 @@ class CelebA(Data):
     def download_celeba(self):
         url_img = 'https://drive.google.com/uc?id=1iBJh4vHuE9h-eMOqVis94QccxCT_LPFW'
         url_anno = 'https://drive.google.com/uc?id=1p0-TEiW4HgT8MblB399ep4YM3u5A0Edc'
-        data_root = './root/dataset/celeba'
+        data_root = './dataset/celeba'
         download_path_img = f'{data_root}/img_align_celeba.zip'
         download_path_anno = f'{data_root}/list_attr_celeba.txt'
         if not os.path.exists(data_root):
@@ -77,16 +78,16 @@ class CelebA(Data):
             self.V_train, self.S_train, self.labels_train = get_set_celeba_dataset(data, data_size=10000, v_size=self.params.v_size)
             self.V_val, self.S_val, self.labels_val = get_set_celeba_dataset(data, data_size=1000, v_size=self.params.v_size)
             self.V_test, self.S_test, self.labels_test = get_set_celeba_dataset(data, data_size=1000, v_size=self.params.v_size)
-            
+
             trainData = {'V_train': self.V_train, 'S_train': self.S_train, 'labels_train': self.labels_train}
             valData = {'V_train': self.V_val, 'S_train': self.S_val, 'labels_train': self.labels_val}
             testData = {'V_train': self.V_test, 'S_train': self.S_test, 'labels_train': self.labels_test}
             pickle.dump((label_names, trainData, valData, testData), open(data_path, "wb"))
 
-    def get_loaders(self, batch_size, num_workers, shuffle_train=False, get_test=True):
-        train_dataset = SetDataset(self.V_train, self.S_train, self.params, is_train=True)
-        val_dataset = SetDataset(self.V_val, self.S_val, self.params)
-        test_dataset = SetDataset(self.V_test, self.S_test, self.params)
+    def get_loaders(self, batch_size, num_workers, shuffle_train=False, get_test=True, transform=None):
+        train_dataset = SetDataset(self.V_train, self.S_train, self.params, is_train=True, transform=transform)
+        val_dataset = SetDataset(self.V_val, self.S_val, self.params, transform=transform)
+        test_dataset = SetDataset(self.V_test, self.S_test, self.params, transform=transform)
 
         train_loader = DataLoader(dataset=train_dataset, batch_size=batch_size,
                                     collate_fn=collate_train, shuffle=shuffle_train, num_workers=num_workers)
@@ -97,12 +98,13 @@ class CelebA(Data):
         return train_loader, val_loader, test_loader
 
 class SetDataset(Dataset):
-    def __init__(self, U, S, params, is_train=False):
+    def __init__(self, U, S, params, is_train=False, transform=None):
         self.data = U
         self.labels = S
         self.is_train = is_train
         self.neg_num = params.neg_num
         self.v_size = params.v_size
+        self.transform = transform
 
     def __getitem__(self, index):
         V_id = self.data[index]
@@ -117,8 +119,12 @@ class SetDataset(Dataset):
             neg_S_mask = torch.zeros([self.v_size])
             neg_S_mask[S] = 1
             neg_S_mask[neg_S] = 1
+            if self.transform:
+                V, S_mask, neg_S_mask = self.transform(V), self.transform(S_mask), self.transform(neg_S_mask)
             return V, S_mask, neg_S_mask
-        
+
+        if self.transform:
+            V, S_mask = self.transform(V), self.transform(S_mask)
         return V, S_mask
     
     def __len__(self):
@@ -173,8 +179,17 @@ def get_set_celeba_dataset(data, data_size, v_size):
     pbar.close()
     return V_list, S_list, label_list
 
+def list_of_numpy_to_tensor(lst):
+    return [torch.tensor(arr) if isinstance(arr, np.ndarray) else arr for arr in lst]
+
+# Convert lists to lists of tensors
+
 def collate_train(data):
     V, S, neg_S = map(list, zip(*data))
+    V = list_of_numpy_to_tensor(V)
+    S = list_of_numpy_to_tensor(S)
+    neg_S = list_of_numpy_to_tensor(neg_S)
+
     bs = len(V)
 
     V = torch.cat(V, dim=0)
@@ -184,11 +199,14 @@ def collate_train(data):
 
 def collate_val_and_test(data):
     V, S = map(list, zip(*data))
+    V = list_of_numpy_to_tensor(V)
+    S = list_of_numpy_to_tensor(S)
     bs = len(V)
 
     V = torch.cat(V, dim=0)
     S = torch.cat(S, dim=0).reshape(bs, -1)
     return V, S
+
 
 def load_img(img_id):
     img_id = str(img_id + 1)    # 0 -> 1

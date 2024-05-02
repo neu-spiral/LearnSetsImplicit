@@ -105,10 +105,10 @@ def parse_arguments():
                         help='temperature of the relaxed multivariate bernoulli [%(default)g]')
     parser.add_argument('--neg_num', type=int, default=1,
                         help='num of the negative item [%(default)d]')
-    # parser.add_argument('--amazon_cat', type=str, default='toys',
-    #                     choices=['toys', 'furniture', 'gear', 'carseats', 'bath', 'health', 'diaper', 'bedding',
-    #                              'safety', 'feeding', 'apparel', 'media'],
-    #                     help='category of amazon baby registry dataset [%(default)d]')
+    parser.add_argument('--amazon_cat', type=str, default='toys',
+                        choices=['toys', 'furniture', 'gear', 'carseats', 'bath', 'health', 'diaper', 'bedding',
+                                 'safety', 'feeding', 'apparel', 'media'],
+                        help='category of amazon baby registry dataset [%(default)d]')
     args = parser.parse_args()
     return args
 

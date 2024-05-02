@@ -5,8 +5,17 @@ import torch
 import zipfile
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
-
+import numpy as np
 from utils.flax_helper import read_from_pickle, find_not_in_set
+
+def numpy_collate(batch):
+    if isinstance(batch[0], np.ndarray):
+        return np.stack(batch)
+    elif isinstance(batch[0], (tuple, list)):
+        transposed = zip(*batch)
+        return [numpy_collate(samples) for samples in transposed]
+    else:
+        return np.array(batch)
 
 
 class Data:
@@ -31,7 +40,7 @@ class Amazon(Data):
 
     def download_amazon(self):
         url = 'https://drive.google.com/uc?id=1OLbCOTsRyowxw3_AzhxJPVB8VAgjt2Y6'
-        data_root = 'root/dataset/amazon'
+        data_root = 'dataset/amazon'
         download_path = f'{data_root}/amazon_baby_registry.zip'
         if not os.path.exists(data_root):
             os.makedirs(data_root)
@@ -124,27 +133,31 @@ class Amazon(Data):
 
         self.fea_size = self.V_train[0].shape[-1]
 
-    def get_loaders(self, batch_size, num_workers, shuffle_train=False, get_test=True):
-        train_dataset = SetDataset(self.V_train, self.S_train, self.params, is_train=True)
-        val_dataset = SetDataset(self.V_val, self.S_val, self.params)
-        test_dataset = SetDataset(self.V_test, self.S_test, self.params)
+    def get_loaders(self, batch_size, num_workers, shuffle_train=False, get_test=True, transform=None):
+        train_dataset = SetDataset(self.V_train, self.S_train, self.params, is_train=True, transform=transform)
+        val_dataset = SetDataset(self.V_val, self.S_val, self.params, transform=transform)
+        test_dataset = SetDataset(self.V_test, self.S_test, self.params, transform=transform)
 
         train_loader = DataLoader(dataset=train_dataset, batch_size=batch_size,
-                                  shuffle=shuffle_train, num_workers=num_workers)
+                                  shuffle=shuffle_train, num_workers=num_workers,
+                                  collate_fn=numpy_collate)
         val_loader = DataLoader(dataset=val_dataset, batch_size=batch_size,
-                                shuffle=False, num_workers=num_workers)
+                                shuffle=False, num_workers=num_workers,
+                                collate_fn=numpy_collate)
         test_loader = DataLoader(dataset=test_dataset, batch_size=batch_size,
-                                 shuffle=False, num_workers=num_workers) if get_test else None
+                                 shuffle=False, num_workers=num_workers,
+                                 collate_fn=numpy_collate) if get_test else None
         return train_loader, val_loader, test_loader
 
 
 class SetDataset(Dataset):
-    def __init__(self, V, S, params, is_train=False):
+    def __init__(self, V, S, params, is_train=False, transform=None):
         self.data = V
         self.labels = S
         self.is_train = is_train
         self.neg_num = params.neg_num
         self.v_size = params.v_size
+        self.transform = transform
 
     def __getitem__(self, index):
         V = self.data[index]
@@ -158,8 +171,12 @@ class SetDataset(Dataset):
             neg_S_mask = torch.zeros([self.v_size])
             neg_S_mask[S] = 1
             neg_S_mask[neg_S] = 1
+            if self.transform:
+                V, S_mask, neg_S_mask = self.transform(V), self.transform(S_mask), self.transform(neg_S_mask)
             return V, S_mask, neg_S_mask
 
+        if self.transform:
+            V, S_mask = self.transform(V), self.transform(S_mask)
         return V, S_mask
 
     def __len__(self):
