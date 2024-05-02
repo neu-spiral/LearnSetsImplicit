@@ -21,7 +21,7 @@
 *.zip
 *.jpg
 *.json
-
+*.pkl
 # Logs and databases #
 ######################
 *.log*
@@ -37,3 +37,5 @@
 .Trashes
 ehthumbs.db
 Thumbs.db
+./checkpoints
+*/celeba/*
