@@ -33,7 +33,7 @@ class TwoMoons(Data):
 
     def gen_datasets(self):
         np.random.seed(1)  # fix dataset
-        V_size, S_size = self.params['v_size'], self.params['s_size']
+        V_size, S_size = self.params.v_size, self.params.s_size
 
         self.V_train, self.S_train = get_two_moons_dataset(V_size, S_size, rand_seed=0)
         self.V_val, self.S_val = get_two_moons_dataset(V_size, S_size, rand_seed=1)
@@ -66,8 +66,8 @@ class SetDataset(Dataset):
         self.data = V
         self.labels = S
         self.is_train = is_train
-        self.neg_num = params['neg_num']
-        self.v_size = params['v_size']
+        self.neg_num = params.neg_num
+        self.v_size = params.v_size
         self.transform = transform
 
     def __getitem__(self, index):
