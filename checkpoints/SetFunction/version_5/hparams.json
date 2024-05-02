@@ -2,9 +2,10 @@
     "model_class": "SetFunction",
     "model_hparams": {
         "params": {
-            "data_name": "moons",
+            "manual_params": false,
+            "data_name": "amazon",
             "root_path": "./",
-            "v_size": 100,
+            "v_size": 30,
             "s_size": 10,
             "num_layers": 2,
             "batch_size": 128,
@@ -13,16 +14,17 @@
             "init": 0.05,
             "clip": 10,
             "epochs": 100,
-            "num_bad_epochs": 6,
             "num_runs": 1,
+            "num_bad_epochs": 6,
             "num_workers": 2,
             "seed": 50971,
-            "mode": "diffMF",
+            "mode": "copula",
             "RNN_steps": 1,
             "num_samples": 5,
             "rank": 5,
             "tau": 0.1,
-            "neg_num": 1
+            "neg_num": 1,
+            "amazon_cat": "toys"
         },
         "dim_feature": 256
     },
@@ -34,6 +36,6 @@
     },
     "enable_progress_bar": false,
     "debug": false,
-    "check_val_every_n_epoch": 5,
+    "check_val_every_n_epoch": 1,
     "seed": 42
 }

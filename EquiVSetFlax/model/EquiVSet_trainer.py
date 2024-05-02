@@ -107,8 +107,6 @@ class EquiVSetTrainer(TrainerModule):
             return state, metrics
 
         def eval_step(state, batch):
-            loss = entropy_loss(state.params, batch)
-            loss = jnp.reshape(loss, (-1,))
             if len(batch) == 3:
                 V_set, S_set, neg_S_set = batch
             elif len(batch) == 2:
@@ -138,6 +136,6 @@ class EquiVSetTrainer(TrainerModule):
             jc = intersection.sum(axis=-1) / union.sum(axis=-1)
             jc = 100*jc
 
-            return {'jaccard': jc, 'loss': loss}  # loss
+            return {'jaccard': jc}  # loss
 
         return train_step, eval_step

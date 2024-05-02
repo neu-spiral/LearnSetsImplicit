@@ -3,7 +3,7 @@ import math
 import flax
 import pickle
 import flax.linen as nn
-
+import torch
 
 def set_value_according_index(tensor, idx, value):
     mask_val = torch.ones(idx.shape).to(tensor.device) * value
@@ -124,6 +124,6 @@ def read_from_pickle(filename):
 
 
 def find_not_in_set(U, S):
-    Ind = jnp.ones(U.shape[0], dtype=bool)
+    Ind = torch.ones(U.shape[0], dtype=bool)
     Ind[S] = False
     return U[Ind]

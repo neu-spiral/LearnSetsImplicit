@@ -45,21 +45,26 @@ def append_dict(master_dict, sub_dict):
     return master_dict
 
 
-def plot_dual_metric_dicts(train_metric_dict, val_metric_dict, dataset):
+def plot_dual_metric_dicts(train_loss_list, train_metric_dict, val_metric_dict, dataset):
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 5))
-
+    ax2.plot(train_loss_list, '-', label=f"Training loss")
     for line_style, ax, metric_dict in zip(['-','--'], [ax1, ax2], [train_metric_dict, val_metric_dict]):
         keys = list(metric_dict.keys())
-        metric1, metric2 = metric_dict[keys[0]], metric_dict[keys[1]]
+        if len(metric_dict) == 2:
+            metric1, metric2 = metric_dict[keys[0]], metric_dict[keys[1]]
 
-        ax1.plot(metric1, line_style, label=f"{keys[0]}")
-        # ax.set_ylabel(f'{keys[0]}', color='blue')
-        # ax.tick_params(axis='y', labelcolor='blue')
+            ax1.plot(metric1, line_style, label=f"{keys[0]}")
+            # ax.set_ylabel(f'{keys[0]}', color='blue')
+            # ax.tick_params(axis='y', labelcolor='blue')
 
-        # ax_twin = ax.twinx()
-        ax2.plot(metric2, line_style, label=f"{keys[1]}")
-        # ax_twin.set_ylabel(f'{keys[1]}', color='red')
-        # ax_twin.tick_params(axis='y', labelcolor='red')
+            # ax_twin = ax.twinx()
+            ax2.plot(metric2, line_style, label=f"{keys[1]}")
+            # ax_twin.set_ylabel(f'{keys[1]}', color='red')
+            # ax_twin.tick_params(axis='y', labelcolor='red')
+        else:
+            metric1 = metric_dict[keys[0]]
+
+            ax1.plot(metric1, line_style, label=f"{keys[0]}")
 
         # ax.set_title(f'Metrics')
         ax1.legend(loc='upper left')
@@ -330,6 +335,7 @@ class TrainerModule(nn.Module):  # why did they define it without nn.Module?
         """
         train_metric_dict = {}
         val_metric_dict = {}
+        train_loss_list = []
         # Create optimizer and the scheduler for the given number of epochs
         self.init_optimizer(num_epochs, len(train_loader))
         # Prepare training loop
@@ -337,12 +343,13 @@ class TrainerModule(nn.Module):  # why did they define it without nn.Module?
         best_eval_metrics = None
         for epoch_idx in self.tracker(range(1, num_epochs + 1), desc='Epochs'):
             train_loss = self.train_epoch(train_loader)
+            train_loss_list.append(train_loss["train/loss"])
             self.logger.log_metrics(train_loss, step=epoch_idx)
             train_metrics = self.eval_model(train_loader, log_prefix='train/')
             append_dict(train_metric_dict, train_metrics)
             self.logger.log_metrics(train_metrics, step=epoch_idx)
             self.save_metrics('train', train_metrics)
-            print(f'Epoch {epoch_idx}: Train loss: {train_metrics["train/loss"]:.2f} Train jc: {train_metrics["train/jaccard"]:.2f}\n')
+            print(f'Epoch {epoch_idx}|Train loss: {train_loss["train/loss"]:.2f} Train jc: {train_metrics["train/jaccard"]:.2f}\n')
 
             self.on_training_epoch_end(epoch_idx)
             # Validation every N epochs
@@ -353,7 +360,7 @@ class TrainerModule(nn.Module):  # why did they define it without nn.Module?
                 self.logger.log_metrics(val_metrics, step=epoch_idx)
                 self.save_metrics(f'eval_epoch_{str(epoch_idx).zfill(3)}', val_metrics)
 
-                print(f'Epoch {epoch_idx}: Val loss: {val_metrics["val/loss"]:.2f} Val jc: {val_metrics["val/jaccard"]:.2f}\n')
+                print(f'Epoch {epoch_idx}|Val jc: {val_metrics["val/jaccard"]:.2f}\n')
                 # Save best model
                 if self.is_new_model_better(val_metrics, best_eval_metrics):
                     best_eval_metrics = val_metrics
@@ -368,10 +375,10 @@ class TrainerModule(nn.Module):  # why did they define it without nn.Module?
             self.logger.log_metrics(test_metrics, step=epoch_idx)
             self.save_metrics('test', test_metrics)
             best_eval_metrics.update(test_metrics)
-            print(f'Epoch {epoch_idx}| Test loss: {test_metrics["test/loss"]:.2f}|Test jc: {test_metrics["test/jaccard"]:.2f}\n')
+            print(f'Epoch {epoch_idx}|Test jc: {test_metrics["test/jaccard"]:.2f}\n')
             # Close logger
         self.logger.finalize('success')
-        plot_dual_metric_dicts(train_metric_dict, val_metric_dict, self.model_hparams['params'].data_name)
+        plot_dual_metric_dicts(train_loss_list, train_metric_dict, val_metric_dict, self.model_hparams['params'].data_name)
         return best_eval_metrics
 
     def train_epoch(self,

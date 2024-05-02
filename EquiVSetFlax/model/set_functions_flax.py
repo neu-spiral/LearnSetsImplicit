@@ -105,8 +105,6 @@ class SetFunction(nn.Module):  # nn.Module is the base class for all NN modules.
         else:
             # to encode variational dist
             fea = self.init_layer(V).reshape(subset_mat.shape[0], -1, self.dim_feature)
-        # print(subset_mat.shape)  # (bs, M, vs, vs)
-        # print(fea.shape)  # (bs, 1, vs, dim_feature)
         fea = subset_mat @ fea
         fea = self.ff(fea)  # goes thru FF block
         # self.ff.apply(params, fea)
