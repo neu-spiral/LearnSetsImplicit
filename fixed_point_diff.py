@@ -92,3 +92,19 @@ if __name__ == "__main__":
     print(g[0])
     g = jax.grad(lambda theta: fixed_point_layer(anderson_solver, f, theta, x).sum())(theta)
     print(g[0])
+
+    def f(x):
+        return jnp.sin(x) * x ** 2
+
+    x = 2.
+    y = f(x)
+    print(y)
+
+    delta_x = 1.
+    y, delta_y = jax.jvp(f, (x,), (delta_x,))
+    print(y)
+    print(delta_y)
+
+    eps = 1e-4
+    delta_y_approx = (f(x + eps * v) - f(x)) / eps
+    print(delta_y_approx)
