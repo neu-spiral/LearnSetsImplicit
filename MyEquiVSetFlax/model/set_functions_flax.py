@@ -10,7 +10,8 @@ import flax
 import flax.linen as nn
 import jax.numpy as jnp
 import numpy as np
-from utils.flax_helper import FF, SigmoidFixedPointLayer, normal_cdf
+from utils.flax_helper import FF, normal_cdf
+from utils.implicit import SigmoidFixedPointLayer
 import matplotlib
 import matplotlib.pyplot as plt
 
@@ -26,13 +27,6 @@ def cross_entropy(q, S, neg_S):  # Eq. (5) in the paper
     # jax.debug.print("shape of neg_S is {neg_S.shape}\n", neg_S=neg_S)
     loss = - jnp.sum((S * jnp.log(q + 1e-12) + (1 - S) * jnp.log(1 - q + 1e-12)) * neg_S, axis=-1)
     return loss.mean()
-
-
-def fwd_solver(f, psi_init):
-    psi_prev, psi = psi_init, f(psi_init)
-    while jnp.linalg.norm(psi_prev - psi) > 1e-5:
-        psi_prev, psi = psi, f(psi)
-    return psi
 
 
 def MC_sampling(q, M):  # we should be able to get rid of this step altogether
@@ -88,8 +82,7 @@ class SetFunction(nn.Module):  # nn.Module is the base class for all NN modules.
     def setup(self):
         self.init_layer = self.define_init_layer()
         self.ff = FF(self.dim_feature, 500, 1, self.params['num_layers'])
-        self.fixed_point_layer = SigmoidFixedPointLayer(self.grad_F_S, MC_sampling,
-                                                        num_samples=self.params['num_samples'])
+        self.fixed_point_layer = SigmoidFixedPointLayer(self.mean_field_iteration)
 
     def define_init_layer(self):
         """
@@ -98,49 +91,20 @@ class SetFunction(nn.Module):  # nn.Module is the base class for all NN modules.
         """
         return nn.Dense(features=self.dim_feature)
 
-    def mean_field_iteration(self, V, subset_i, subset_not_i):  # ψ_i in the paper, I can call this as a layer
-        # print((self.grad_F_S(V, subset_i, subset_not_i)).mean(1).shape)
+    def mean_field_iteration(self, V, q):  # subset_i, subset_not_i):  # ψ_i in the paper, I can call this as a layer
+        subset_i, subset_not_i, _ = MC_sampling(q, self.params['num_samples'])  # returns S+i , S
         q = jax.nn.sigmoid(self.grad_F_S(V, subset_i, subset_not_i))
         return q
 
     def __call__(self, V, S, neg_S, **kwargs):
         """"returns cross-entropy loss."""
         bs, vs = V.shape[:2]
-        q = .5 * jnp.ones((bs, vs))  # ψ_0 <-- 0.5 * vector(1)
-        # q = jax.random.uniform(jax.random.PRNGKey(758493), shape=(bs, vs))
+        q_init = .5 * jnp.ones((bs, vs))  # ψ_0 <-- 0.5 * vector(1)
 
-        for i in range(self.params['RNN_steps']):  # MFVI K times where K = RNN_steps
-            sample_matrix_1, sample_matrix_0, _ = MC_sampling(q, self.params['num_samples'])  # returns S+i , S
-            q = self.mean_field_iteration(V, sample_matrix_1, sample_matrix_0)  # ψ, ∇f^{Fθ}(ψ), Eq. 11
-
-        # q = SigmoidFixedPointLayer(self.grad_F_S, MC_sampling, num_samples=self.params['num_samples'])(q)
-
-        # there should be an alternative q definition here using IFT and AutoGrad
-        # @partial(jax.custom_vjp, nondiff_argnums=(0, 1))
-        # def fixed_point_layer(solver, f, params):
-        #     psi_star = solver(lambda psi: f(params, psi), psi_init=jnp.zeros_like(x))
-        #     return psi_star
-        #
-        # def fixed_point_layer_fwd(solver, f, params):
-        #     psi_star = fixed_point_layer(solver, f, params)
-        #     return psi_star, (params, psi_star)
-        #
-        # def fixed_point_layer_bwd(solver, f, res, psi_star_bar):
-        #     params, x, psi_star = res
-        #     _, vjp_a = jax.vjp(lambda params, x: f(params, psi_star), params)
-        #     _, vjp_psi = jax.vjp(lambda psi: f(params, psi), psi_star)
-        #     return vjp_a(solver(lambda u: vjp_psi(u)[0] + psi_star_bar, psi_init=jnp.zeros_like(psi_star)))
-        #
-        # fixed_point_layer.defvjp(fixed_point_layer_fwd, fixed_point_layer_bwd)
-        #
-        # theta = random.normal(random.PRNGKey(0), (ndim, ndim)) / jnp.sqrt(ndim)
-        #
-        # psi_star = fixed_point_layer(fwd_solver, f, theta)
-        #
-        # theta = theta - eta * jax.grad(lambda theta: fixed_point_layer(fwd_solver, f, theta, x).sum())(theta)
+        q, _, _ = self.fixed_point_layer(q_init, V)
 
         loss = cross_entropy(q, S, neg_S)
-        # jax.debug.print("loss is {loss}\n", loss=loss)
+
         return loss
 
     def F_S(self, V, subset_mat, fpi=False):
@@ -188,7 +152,7 @@ class SetFunction(nn.Module):  # nn.Module is the base class for all NN modules.
     def estimate_grad_F_S(self, V, subset_mat, delta):
         bs, M, vs = subset_mat.shape[:-1]
         mask = jnp.expand_dims(jnp.concatenate([jnp.expand_dims(jnp.eye(vs, vs), axis=0) for _ in range(M)], axis=0),
-                           axis=0)
+                               axis=0)
         F_delta = self.F_S(V, subset_mat + mask * delta, fpi=True).squeeze(-1)
         F = self.F_S(V, subset_mat, fpi=True).squeeze(-1)
         return (F_delta - F).mean(1) / delta
@@ -361,66 +325,31 @@ if __name__ == "__main__":
     mySetModel = SetFunction(params=params)
     # print(mySetModel)
     new_params = mySetModel.init(init_rng, V_inp, S_inp, neg_S_inp)
-    # print(new_params)
+    print(new_params)
 
-    # for v_size in range(1, 17):
-    #     V_inp = jax.random.normal(V_inp_rng, (1, v_size, 2))  # Batch size 4, input size (V) 100, dim_input 2
-    #     powerset = mySetModel.get_powerset(V_inp)
-    #     # print(powerset)
-    #     bs, vs = V_inp.shape[:2]
-    #     q = .5 * jnp.ones((bs, vs))
-    #     multilin = mySetModel.apply(new_params, V_inp, powerset, q, method="multilinear_relaxation")
-    #     # print(multilin)
-    #     # q_i, q_not_i = mySetModel.get_q_i(q)
-    #     # true_multilin_grad = mySetModel.apply(new_params, V_inp, q_i, q_not_i, method="true_grad")
-    #     # print(true_multilin_grad)
-    #     errs = []
-    #     for num_samples in [1, 10, 100, 1000, 10000]:
-    #         subset_i, subset_not_i, subset_mat = MC_sampling(q, num_samples)
-    #         # print(subset_mat)
-    #         F_S = mySetModel.apply(new_params, V_inp, subset_mat, fpi=True,  method="F_S")
-    #         F_S = F_S.squeeze(-1).mean(1).mean(-1)
-    #         # print(F_S)
-    #         err = jnp.linalg.norm(multilin - F_S)
-    #         print(err)
-    #         errs.append(err)
+    # layer = SigmoidFixedPointLayer(set_func=mySetModel, samp_func=MC_sampling, num_samples=params['num_samples'])
+    # rng, X_rng = jax.random.split(rng, 2)
+    # variables = layer.init(jax.random.key(0), jnp.ones((4, 30)), V_inp)
+    # all_iterations = []
+    # for X_rng in range(40):
+    #     X = jax.random.normal(jax.random.key(X_rng), (4, 30))
+    #     Z, iterations, err, errs = layer.apply(variables, X, V_inp)
+    #     print(f"Terminated after {iterations} iterations with error {err}")
+    #     all_iterations.append(iterations)
+    #
     #     plt.figure()
-    #     plt.xscale("log")
-    #     plt.plot([1, 10, 100, 1000, 10000], errs)
-    #     plt.xlabel(f'# of samples (log)')
-    #     plt.ylabel(r'$|\tilde{F} (\boldsymbol{\psi}, \boldsymbol{\theta}) - '
-    #                r'\hat{\tilde{F}} (\boldsymbol{\psi}, \boldsymbol{\theta})|$')
-    #     plt.title(r'Difference between the true multilinear relaxation and its estimation')
+    #     plt.yscale("log")
+    #     plt.plot(range(iterations), errs)
+    #     plt.xlabel(f'fixed point iterations for X_rng={X_rng}')
+    #     plt.ylabel(r'$|q - q_{next}|$')
+    #     plt.title(r'Difference between fixed point iterations')
     #     plt.show()
-    #     plot_path = f'plots/tests/multilin/V_size_{v_size}'
+    #     plot_path = f'plots/early_stop/test_{X_rng}'
     #     while os.path.isfile(f'{plot_path}.png'):
     #         plot_path += '+'
     #     plt.savefig(f'{plot_path}.png', bbox_inches="tight")
     #     plt.close()
-
-    layer = SigmoidFixedPointLayer(set_func=mySetModel, samp_func=MC_sampling, num_samples=params['num_samples'])
-    rng, X_rng = jax.random.split(rng, 2)
-    variables = layer.init(jax.random.key(0), jnp.ones((4, 30)), V_inp)
-    all_iterations = []
-    for X_rng in range(40):
-        X = jax.random.normal(jax.random.key(X_rng), (4, 30))
-        Z, iterations, err, errs = layer.apply(variables, X, V_inp)
-        print(f"Terminated after {iterations} iterations with error {err}")
-        all_iterations.append(iterations)
-
-        plt.figure()
-        plt.yscale("log")
-        plt.plot(range(iterations), errs)
-        plt.xlabel(f'fixed point iterations for X_rng={X_rng}')
-        plt.ylabel(r'$|q - q_{next}|$')
-        plt.title(r'Difference between fixed point iterations')
-        plt.show()
-        plot_path = f'plots/early_stop/test_{X_rng}'
-        while os.path.isfile(f'{plot_path}.png'):
-            plot_path += '+'
-        plt.savefig(f'{plot_path}.png', bbox_inches="tight")
-        plt.close()
-
-    print(
-        f"On average, fixed-point iterations are terminated after {sum(all_iterations) / len(all_iterations):.2f} iterations.")
-    # subset_i, subset_not_i = mySet.MC_sampling(q, 500)
+    #
+    # print(
+    #     f"On average, fixed-point iterations are terminated after {sum(all_iterations) / len(all_iterations):.2f} iterations.")
+    # # subset_i, subset_not_i = mySet.MC_sampling(q, 500)
