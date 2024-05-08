@@ -25,7 +25,7 @@ class SigmoidFixedPointLayer(nn.Module):
 
         # iterate until convergence
         while iterations < self.max_iter:
-            q_next = self.fixed_point(V, q)
+            q_next = self.fixed_point(q, V)
             err = jnp.linalg.norm(q - q_next)
             if self.is_test:
                 errs.append(err)
