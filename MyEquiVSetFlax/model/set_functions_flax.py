@@ -10,8 +10,12 @@ import flax
 import flax.linen as nn
 import jax.numpy as jnp
 import numpy as np
+from functools import partial
+from jaxopt import AndersonAcceleration, FixedPointIteration
+from jaxopt.linear_solve import solve_gmres, solve_normal_cg
+from typing import Any
 from utils.flax_helper import FF, normal_cdf
-from utils.implicit import SigmoidFixedPointLayer
+from utils.implicit import SigmoidFixedPointLayer, SigmoidImplicitLayer
 import matplotlib
 import matplotlib.pyplot as plt
 
@@ -40,6 +44,7 @@ def MC_sampling(q, M):  # we should be able to get rid of this step altogether
         Sampled subsets F(S+i), F(S)
 
     """
+    print(q.shape)
     bs, vs = q.shape
     # uncomment below for the fully randomized version
     # q = jnp.broadcast_to(q.reshape(bs, 1, 1, vs), (bs, M, vs, vs))  # a new sample is generated for each coordinate
@@ -70,6 +75,120 @@ def MC_sampling(q, M):  # we should be able to get rid of this step altogether
 
 
 # noinspection PyAttributeOutsideInit
+class MFVI(nn.Module):
+    params: dict
+    dim_feature: int = 256
+
+    def setup(self):
+        self.init_layer = self.define_init_layer()
+        self.ff = FF(self.dim_feature, 500, 1, self.params['num_layers'])
+
+    def define_init_layer(self):
+        """
+        Returns the initial layer custom to different setups.
+        :return: InitLayer
+        """
+        return nn.Dense(features=self.dim_feature)
+
+    # noinspection PyMethodMayBeStatic
+    def MC_sampling(self, q, M):  # we should be able to get rid of this step altogether
+        """
+        Bernoulli sampling using q as parameters.
+        Args:
+            q: parameter of Bernoulli distribution (ψ in the paper)
+            M: number of samples (m in the paper)
+
+        Returns:
+            Sampled subsets F(S+i), F(S)
+            :param M:
+            :param q:
+            :param self:
+
+        """
+        print(q.shape)
+        bs, vs = q.shape
+        # uncomment below for the fully randomized version
+        # q = jnp.broadcast_to(q.reshape(bs, 1, 1, vs), (bs, M, vs, vs))  # a new sample is generated for each coordinate
+
+        # uncomment below for the de-randomized version
+        q = jnp.broadcast_to(q.reshape(bs, 1, vs), (bs, M, vs))  # same sample is used for each coordinate
+        q = jax.device_put(q)  # not sure if we need this
+        sample_matrix = jax.random.bernoulli(jax.random.PRNGKey(758493), q)
+
+        # uncomment below for the fully randomized version
+        sample_matrix = jnp.broadcast_to(sample_matrix.reshape(bs, M, 1, vs), (bs, M, vs, vs))
+
+        mask = jnp.expand_dims(jnp.concatenate([jnp.expand_dims(jnp.eye(vs, vs), axis=0) for _ in range(M)], axis=0),
+                               axis=0)
+        matrix_0 = sample_matrix * (1 - mask)  # element_wise multiplication
+        matrix_1 = matrix_0 + mask
+        return matrix_1, matrix_0, sample_matrix  # F([x]_+i), F([x]_- i)
+
+    def F_S(self, V, subset_mat, fpi=False):
+        # print(self.init_layer(V).type)
+        # print(self.init_layer(V).shape)
+        if fpi:
+            # to fix point iteration (aka mean-field iteration)
+            fea = self.init_layer(V).reshape(subset_mat.shape[0], 1, -1, self.dim_feature)
+        else:
+            # to encode variational dist
+            fea = self.init_layer(V).reshape(subset_mat.shape[0], -1, self.dim_feature)
+        # print(subset_mat.shape)  # (bs, M, vs, vs)
+        # print(fea.shape)  # (bs, 1, vs, dim_feature)
+        fea = subset_mat @ fea
+        # print(fea.shape)
+        fea = self.ff(fea)  # goes through FF block
+        # self.ff.apply(params, fea)
+        # print(fea.shape)
+        return fea
+
+    def grad_F_S(self, V, subset_i, subset_not_i):
+        F_1 = self.F_S(V, subset_i, fpi=True).squeeze(-1)
+        F_0 = self.F_S(V, subset_not_i, fpi=True).squeeze(-1)
+        return (F_1 - F_0).mean(1)
+
+    def __call__(self, q, V):  # subset_i, subset_not_i):  # ψ_i in the paper, I can call this as a layer
+        subset_i, subset_not_i, _ = self.MC_sampling(q, self.params['num_samples'])  # returns S+i , S
+        q = jax.nn.sigmoid(self.grad_F_S(V, subset_i, subset_not_i))
+        return q
+
+
+class DiffMF(nn.Module):
+    params: dict
+    MFVI_instance: Any
+
+    # noinspection PyAttributeOutsideInit
+    def setup(self):
+        self.fixed_point_layer = self.define_fixed_point_layer()
+
+    def define_fixed_point_layer(self):
+        """
+
+        :return:
+        """
+        if not self.params['IFT']:
+            return SigmoidFixedPointLayer(self.mean_field_iteration)
+        if self.params['bwd_solver'] == 'normal_cg':
+            implicit_solver = partial(solve_normal_cg, tol=1e-3, maxiter=20)
+        if self.params['fwd_solver'] == 'fpi':
+            fixed_point_solver = partial(FixedPointIteration,
+                                         maxiter=100,
+                                         tol=1e-3, implicit_diff=True,
+                                         implicit_diff_solve=implicit_solver)
+        return SigmoidImplicitLayer(fixed_point=self.MFVI_instance, fixed_point_solver=fixed_point_solver)
+
+    def __call__(self, V, **kwargs):
+        """"returns cross-entropy loss."""
+        bs, vs = V.shape[:2]
+        q_init = .5 * jnp.ones((bs, vs))  # ψ_0 <-- 0.5 * vector(1)
+
+        # q, _, _ = self.fixed_point_layer(q_init, V)
+        q = self.fixed_point_layer(q_init, V)
+
+        return q
+
+
+# noinspection PyAttributeOutsideInit
 class SetFunction(nn.Module):  # nn.Module is the base class for all NN modules. Any model should subclass this class.
     """
         Definition of the set function (F_θ) using a NN.
@@ -82,7 +201,7 @@ class SetFunction(nn.Module):  # nn.Module is the base class for all NN modules.
     def setup(self):
         self.init_layer = self.define_init_layer()
         self.ff = FF(self.dim_feature, 500, 1, self.params['num_layers'])
-        self.fixed_point_layer = SigmoidFixedPointLayer(self.mean_field_iteration)
+        self.fixed_point_layer = self.define_fixed_point_layer()
 
     def define_init_layer(self):
         """
@@ -91,6 +210,16 @@ class SetFunction(nn.Module):  # nn.Module is the base class for all NN modules.
         """
         return nn.Dense(features=self.dim_feature)
 
+    def define_fixed_point_layer(self):
+        """
+
+        :return:
+        """
+        if not self.params['IFT']:
+            return SigmoidFixedPointLayer(self.mean_field_iteration)
+        single_iteration = MFVI(params=self.params)
+        return DiffMF(params=self.params, MFVI_instance=single_iteration)
+
     def mean_field_iteration(self, V, q):  # subset_i, subset_not_i):  # ψ_i in the paper, I can call this as a layer
         subset_i, subset_not_i, _ = MC_sampling(q, self.params['num_samples'])  # returns S+i , S
         q = jax.nn.sigmoid(self.grad_F_S(V, subset_i, subset_not_i))
@@ -98,10 +227,13 @@ class SetFunction(nn.Module):  # nn.Module is the base class for all NN modules.
 
     def __call__(self, V, S, neg_S, **kwargs):
         """"returns cross-entropy loss."""
-        bs, vs = V.shape[:2]
-        q_init = .5 * jnp.ones((bs, vs))  # ψ_0 <-- 0.5 * vector(1)
+        if not self.params['IFT']:
+            bs, vs = V.shape[:2]
+            q_init = .5 * jnp.ones((bs, vs))  # ψ_0 <-- 0.5 * vector(1)
 
-        q, _, _ = self.fixed_point_layer(q_init, V)
+            q, _, _ = self.fixed_point_layer(q_init, V)
+        else:
+            q = self.fixed_point_layer(V)
 
         loss = cross_entropy(q, S, neg_S)
 
@@ -310,7 +442,7 @@ class RecNet(nn.Module):  # this is only used for 'ind' or 'copula' modes
 if __name__ == "__main__":
     params = {'v_size': 30, 's_size': 10, 'num_layers': 2, 'batch_size': 1, 'lr': 0.0001, 'weight_decay': 1e-5,
               'init': 0.05, 'clip': 10, 'epochs': 100, 'num_runs': 1, 'num_bad_epochs': 6, 'num_workers': 2,
-              'RNN_steps': 1, 'num_samples': 100}
+              'RNN_steps': 1, 'num_samples': 100, 'IFT': False, 'bwd_solver': 'normal_cg', 'fwd_solver': 'fpi'}
 
     rng = jax.random.PRNGKey(42)
     rng, V_inp_rng, S_inp_rng, neg_S_inp_rng, rec_net_inp_rng, init_rng = jax.random.split(rng, 6)
@@ -326,6 +458,14 @@ if __name__ == "__main__":
     # print(mySetModel)
     new_params = mySetModel.init(init_rng, V_inp, S_inp, neg_S_inp)
     print(new_params)
+    # single_iteration = MFVI(params=params)
+    # bs, vs = V_inp.shape[:2]
+    # q_init = .5 * jnp.ones((bs, vs))  # ψ_0 <-- 0.5 * vector(1)
+    # new_params = single_iteration.init(init_rng, q_init, V_inp)
+    # # print(new_params)
+    # myDiffMF = DiffMF(params=params, MFVI_instance=single_iteration)
+    # diff_params = myDiffMF.init(init_rng, V_inp, S_inp, neg_S_inp)
+    # print(diff_params)
 
     # layer = SigmoidFixedPointLayer(set_func=mySetModel, samp_func=MC_sampling, num_samples=params['num_samples'])
     # rng, X_rng = jax.random.split(rng, 2)

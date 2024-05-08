@@ -39,32 +39,28 @@ class SigmoidFixedPointLayer(nn.Module):
 
 
 class SigmoidImplicitLayer(nn.Module):  # JAXOpt solves this for us using implicit differentiation
-    set_func: Callable
+    fixed_point: Callable
     fixed_point_solver: Any  # AndersonAcceleration or FixedPointIteration
-    num_samples: int = 5
 
-    def __call__(self, x, V, **kwargs):
-        q = x
+    # @partial(nn.transforms.vmap,
+    #          variable_axes={'params': None},
+    #          split_rngs={'params': False},
+    #          in_axes=(None, 0))
+    @nn.compact
+    def __call__(self, q_init, V, **kwargs):
+        q = q_init
+        init = lambda rng, x: self.fixed_point.init(rng, q, V)
+        block_params = self.param("block_params", init, q)
 
-        key = jax.random.key(42)
-        V_dummy = jnp.ones(shape=V.shape)
-        init_params = self.set_func.init(key, V_dummy, q, method='mean_field_iteration')
-
-        # # shape of a single example
-        # init = lambda rng, x: self.set_func.init(rng, x[0], x[0], x[0], method='grad_F_S')
-        # init_params = self.param("init_params", init, x)
-
-        def set_func_apply(q, V, init_params):
-            return self.set_func.apply(init_params, V, q, method='mean_field_iteration')
+        def set_func_apply(q, V):
+            return self.fixed_point.apply(block_params, q, V)
 
         solver = self.fixed_point_solver(fixed_point_fun=set_func_apply)
 
-        def batch_run(q, init_params):
+        def batch_run(q, V, block_params):
             # print(solver.run(V_dummy, q, init_params).params)
-            return solver.run(q, V, init_params)
+            return solver.run(q, V, block_params)
 
         # We use vmap since we want to compute the fixed point separately for each
         # example in the batch.
-        return batch_run(q, init_params).params  # jax.vmap(batch_run, in_axes=(0, None), out_axes=(0, None))(q, init_params)
-
-
+        return jax.vmap(batch_run, in_axes=(0, None), out_axes=0)(q, V, block_params)  # understand what vmap does and modify this line

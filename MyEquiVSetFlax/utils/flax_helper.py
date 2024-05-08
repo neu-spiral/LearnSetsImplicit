@@ -5,6 +5,7 @@ import flax
 import pickle
 import flax.linen as nn
 import jax.numpy as jnp
+from functools import partial
 from typing import Callable
 
 
@@ -41,6 +42,10 @@ class FF(nn.Module):
     layer_norm: bool = False
     residual_connection: bool = False
 
+    @partial(nn.transforms.vmap,
+             variable_axes={'params': None},
+             split_rngs={'params': False},
+             in_axes=(None, 0))
     @nn.compact
     def __call__(self, x, **kwargs):
         if not self.residual_connection:
