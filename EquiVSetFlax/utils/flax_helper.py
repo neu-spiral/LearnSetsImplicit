@@ -1,9 +1,12 @@
 import dgl
 import math
+import jax
 import flax
 import pickle
 import flax.linen as nn
-import torch
+import jax.numpy as jnp
+from typing import Callable
+
 
 def set_value_according_index(tensor, idx, value):
     mask_val = torch.ones(idx.shape).to(tensor.device) * value
@@ -26,32 +29,106 @@ def get_init_function(init_value):
     return init_function
 
 
-# no need for flax
-def move_to_device(obj, device):
-    if torch.is_tensor(obj):
-        return obj.to(device)
-    elif isinstance(obj, dgl.DGLGraph):
-        return obj.to(device)
-    elif isinstance(obj, dict):
-        res = {}
-        for k, v in obj.items():
-            res[k] = move_to_device(v, device)
-        return res
-    elif isinstance(obj, list):
-        res = []
-        for v in obj:
-            res.append(move_to_device(v, device))
-        return res
-    elif isinstance(obj, tuple):
-        res = ()
-        for v in obj:
-            res += (move_to_device(v, device),)
-        return res
-    else:
-        raise TypeError("Invalid type for move_to_device")
+class SigmoidFixedPointLayer(nn.Module):
+    set_func: Callable
+    samp_func: Callable
+    num_samples: int = 5
+    tol: float = 1e-3
+    max_iter: int = 100
+
+    def __call__(self, x, V, **kwargs):
+        # initialize output q to be 0.5
+        # bs, vs = x.shape
+        # q = .5 * jnp.ones((bs, vs))
+        q = x
+        iterations = 0
+        errs = []
+        last_err = float('inf')
+
+        subset_i, subset_not_i, _ = self.samp_func(q, self.num_samples)
+        key = jax.random.key(42)
+        V_dummy = jnp.ones(shape=V.shape)
+        s1_dummy = jnp.ones(shape=subset_i.shape)
+        s0_dummy = jnp.ones(shape=subset_not_i.shape)
+        init_params = self.set_func.init(key, V_dummy, s1_dummy, s0_dummy, method='grad_F_S')
+
+        # iterate until convergence
+        while iterations < self.max_iter:
+            subset_i, subset_not_i, _ = self.samp_func(q, self.num_samples)
+            grad_set_func = self.set_func.apply(init_params, V, subset_i, subset_not_i, method='grad_F_S')
+            q_next = jax.nn.sigmoid(grad_set_func)
+            err = jnp.linalg.norm(q - q_next)
+            errs.append(err)
+            q = q_next
+            iterations += 1
+            if err < self.tol or last_err < err:
+                break
+            last_err = err
+
+        return q, iterations, err, errs
+
+
+class SigmoidImplicitLayer(nn.Module):
+    set_func: Callable
+    fixed_point_solver: Any  # AndersonAcceleration or FixedPointIteration
+    samp_func: Callable
+    num_samples: int = 5
+    tol: float = 1e-3
+    max_iter: int = 100
+
+    def __call__(self, x, V):
+        q = x
+        iterations = 0
+        errs = []
+        last_err = float('inf')
+
+        subset_i, subset_not_i, _ = self.samp_func(q, self.num_samples)
+        key = jax.random.key(42)
+        V_dummy = jnp.ones(shape=V.shape)
+        s1_dummy = jnp.ones(shape=subset_i.shape)
+        s0_dummy = jnp.ones(shape=subset_not_i.shape)
+        init_params = self.set_func.init(key, V_dummy, s1_dummy, s0_dummy, method='grad_F_S')
+
+        # shape of a single example
+        init = lambda rng, x: self.set_func.init(rng, x[0], x[0], x[0], method='grad_F_S')
+        init_params = self.param("init_params", init, x)
+
+        def set_func_apply(z, x, init_params):
+            return self.set_func.apply(init_params, z, x, method='grad_F_S')
+
+        solver = self.fixed_point_solver(fixed_point_fun=set_func_apply)
+
+        def batch_run(x, init_params):
+            return solver.run(x, x, init_params)[0]
+
+        # We use vmap since we want to compute the fixed point separately for each
+        # example in the batch.
+        return jax.vmap(batch_run, in_axes=(0, None), out_axes=0)(x, init_params)
+
+        # # Run Newton's method outside of the autograd framework
+        # z = jax.nn.sigmoid(x)
+        # self.iterations = 0
+        # while self.iterations < self.max_iter:
+        #     z_linear = self.linear(z) + x
+        #     g = z - jax.nn.sigmoid(z_linear)
+        #     self.err = jnp.linalg.norm(g)
+        #     if self.err < self.tol:
+        #         break
+        #
+        #     # newton step
+        #     J = torch.eye(z.shape[1])[None, :, :] - (1 / torch.cosh(z_linear) ** 2)[:, :,
+        #                                             None] * self.linear.weight[None, :, :]
+        #     z = z - torch.solve(g[:, :, None], J)[0][:, :, 0]
+        #     self.iterations += 1
+        #
+        # # reengage autograd and add the gradient hook
+        # z = torch.tanh(self.linear(z) + x)
+        # z.register_hook(lambda grad: torch.solve(grad[:, :, None], J.transpose(1, 2))[0][:, :, 0])
+        # return z
 
 
 # noinspection PyAttributeOutsideInit
+# feed forward
 class FF(nn.Module):
     dim_input: int
     dim_hidden: int
@@ -83,6 +160,7 @@ class FF(nn.Module):
                     x += nn.Dropout(self.dropout_rate)(x)
             x += nn.Dense(features=self.dim_output)(x)
         return x
+
 
     # def setup(self):
     #     assert num_layers >= 0  # 0 = Linear
