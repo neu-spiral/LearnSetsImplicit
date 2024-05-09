@@ -28,6 +28,9 @@ class FixedPointUpdate(nn.Module):
     dim_feature: int = 256
 
     def setup(self):
+        """
+        A set function F_θ is characterized by an initial layer (init_layer) and a feed forward network (ff).
+        """
         self.init_layer = self.define_init_layer()
         self.ff = FF(self.dim_feature, 500, 1, self.params['num_layers'])
 
@@ -38,10 +41,16 @@ class FixedPointUpdate(nn.Module):
         """
         return nn.Dense(features=self.dim_feature)
 
-    def __call__(self, q, V):  # subset_i, subset_not_i):  # ψ_i in the paper, I can call this as a layer
+    def __call__(self, q, V):
+        """
+        Single fixed_point iterative update step given in Eq. (9) of [Ou et al., 2023]. Given ψ^(k) returns ψ^(k+1).
+
+        :param q: variational update parameter ψ^(k) of shape = [batch_size, V_size]
+        :param V: ground set of shape = [batch_size, V_size]
+        :return: q_next: ψ^(k+1) of shape = [batch_size, V_size]
+        """
         subset_i, subset_not_i, _ = self.MC_sampling(q, self.params['num_samples'])  # returns S+i , S
-        q = jax.nn.sigmoid(self.grad_F_S(V, subset_i, subset_not_i))
-        return q
+        return jax.nn.sigmoid(self.grad_F_S(V, subset_i, subset_not_i))
 
     # noinspection PyMethodMayBeStatic
     def MC_sampling(self, q, M):  # we should be able to get rid of this step altogether
@@ -89,7 +98,7 @@ class FixedPointUpdate(nn.Module):
         # print(subset_mat.shape)  # (bs, M, vs, vs)
         # print(fea.shape)  # (bs, 1, vs, dim_feature)
         fea = subset_mat @ fea
-        # print(fea.shape)
+        print(fea.shape)
         fea = self.ff(fea)  # goes through FF block
         # self.ff.apply(params, fea)
         # print(fea.shape)
@@ -185,7 +194,7 @@ class MFVI(nn.Module):
                                          maxiter=100,
                                          tol=1e-3, implicit_diff=True,
                                          implicit_diff_solve=implicit_solver)
-        return SigmoidImplicitLayer(fixed_point=self.MFVI_instance, fixed_point_solver=fixed_point_solver)
+        return SigmoidImplicitLayer(fixed_point=self.fixed_point, fixed_point_solver=fixed_point_solver)
 
     def __call__(self, q_init, V, **kwargs):
         """"returns cross-entropy loss."""
@@ -359,7 +368,7 @@ if __name__ == "__main__":
     mySetModel = SetFunction(params=params)
     # print(mySetModel)
     new_params = mySetModel.init(init_rng, V_inp, S_inp, neg_S_inp)
-    print(new_params)
+    print(mySetModel.apply(new_params, V_inp, S_inp, neg_S_inp))
     # single_iteration = MFVI(params=params)
     # bs, vs = V_inp.shape[:2]
     # q_init = .5 * jnp.ones((bs, vs))  # ψ_0 <-- 0.5 * vector(1)

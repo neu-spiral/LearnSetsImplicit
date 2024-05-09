@@ -16,8 +16,11 @@ class SigmoidFixedPointLayer(nn.Module):
     is_test: bool = False
     early_stop: bool = False
 
+    @nn.compact
     def __call__(self, q_init, V, **kwargs):
         q = q_init
+        init = lambda rng, q: self.fixed_point.init(rng, q, V)
+        block_params = self.param("block_params", init, q)
         iterations = 0
         if self.is_test:
             errs = []
@@ -25,7 +28,7 @@ class SigmoidFixedPointLayer(nn.Module):
 
         # iterate until convergence
         while iterations < self.max_iter:
-            q_next = self.fixed_point(q, V)
+            q_next = self.fixed_point.apply(block_params, q, V)
             err = jnp.linalg.norm(q - q_next)
             if self.is_test:
                 errs.append(err)
@@ -49,7 +52,7 @@ class SigmoidImplicitLayer(nn.Module):  # JAXOpt solves this for us using implic
     @nn.compact
     def __call__(self, q_init, V, **kwargs):
         q = q_init
-        init = lambda rng, x: self.fixed_point.init(rng, q, V)
+        init = lambda rng, q: self.fixed_point.init(rng, q, V)
         block_params = self.param("block_params", init, q)
 
         def set_func_apply(q, V):

@@ -32,7 +32,7 @@ from torchvision import transforms
 from pytorch_lightning.loggers import TensorBoardLogger, WandbLogger
 
 from model.EquiVSet_trainer import EquiVSetTrainer
-from data_loader import TwoMoons, GaussianMixture,Amazon, CelebA, SetPDBBind, SetBindingDB
+from data_loader import TwoMoons, GaussianMixture, Amazon, CelebA, SetPDBBind, SetBindingDB
 import utils.config as config_file
 
 # jax.config.update("jax_debug_nans", True)  # stops execution when nan occurs
@@ -54,7 +54,9 @@ def get_data(params):
     elif data_name == 'bindingdb':
         return SetBindingDB(params)
     else:
-        raise ValueError("Invalid data_name. Supported options are: 'moons', 'gaussian', 'amazon', 'celeba', 'pdbbind', 'bindingdb'")
+        raise ValueError(
+            "Invalid data_name. Supported options are: 'moons', 'gaussian', 'amazon', 'celeba', 'pdbbind', 'bindingdb'")
+
 
 def parse_arguments():
     parser = argparse.ArgumentParser()
@@ -92,7 +94,7 @@ def parse_arguments():
                         help='num dataloader workers [%(default)d]')
     parser.add_argument('--seed', type=int, default=50971,
                         help='random seed [%(default)d]')
-    parser.add_argument('--mode', type=str, default='copula',
+    parser.add_argument('--mode', type=str, default='diffMF',
                         choices=['diffMF', 'ind', 'copula'],
                         help='name of the variant model [%(default)s]')
     parser.add_argument('--RNN_steps', type=int, default=1,
@@ -109,6 +111,16 @@ def parse_arguments():
                         choices=['toys', 'furniture', 'gear', 'carseats', 'bath', 'health', 'diaper', 'bedding',
                                  'safety', 'feeding', 'apparel', 'media'],
                         help='category of amazon baby registry dataset [%(default)d]')
+    parser.add_argument('--IFT', type=bool, default=True,
+                        help='Implicit differentiation flag [%(default)d]')
+    parser.add_argument('--bwd_solver', type=str, default='normal_cg',
+                        choices=['normal_cg', 'gmres'],
+                        help='Backward solver choice to be used in backpropagation during implicit differentiation '
+                             '[%(default)d]')
+    parser.add_argument('--fwd_solver', type=str, default='fpi',
+                        choices=['fpi', 'anderson'],
+                        help='Forward solver choice to be used in forward pass during implicit differentiation '
+                             '[%(default)d]')
     args = parser.parse_args()
     return args
 
@@ -135,9 +147,11 @@ if __name__ == "__main__":
     batch_size = params.batch_size
     num_workers = params.num_workers
 
+
     def tensor_to_numpy(x):
         x = np.array(x, dtype=np.float32)
         return x
+
 
     train_loader, val_loader, test_loader = data.get_loaders(batch_size, num_workers, transform=tensor_to_numpy)
     # print(next(iter(train_loader)))
@@ -148,7 +162,7 @@ if __name__ == "__main__":
                               logger_params={'base_log_dir': CHECKPOINT_PATH},
                               exmp_input=next(iter(train_loader)),
                               check_val_every_n_epoch=1,
-                              debug=False,
+                              debug=True,
                               enable_progress_bar=False)
 
     metrics = trainer.train_model(train_loader,
