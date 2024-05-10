@@ -45,9 +45,9 @@ class TwoMoons(Data):
     def get_loaders(self, batch_size, num_workers, shuffle_train=False, get_test=True, transform=None):
         train_dataset = SetDataset(self.V_train, self.S_train, self.params, is_train=True, transform=transform)
         # revert is_train to False for inference
-        val_dataset = SetDataset(self.V_val, self.S_val, self.params, is_train=True, transform=transform)
+        val_dataset = SetDataset(self.V_val, self.S_val, self.params, is_train=False, transform=transform)
         # revert is_train to False for inference
-        test_dataset = SetDataset(self.V_test, self.S_test, self.params, is_train=True, transform=transform)
+        test_dataset = SetDataset(self.V_test, self.S_test, self.params, is_train=False, transform=transform)
 
         train_loader = DataLoader(dataset=train_dataset, batch_size=batch_size,
                                   shuffle=shuffle_train, num_workers=num_workers,
