@@ -29,7 +29,7 @@ from torchvision import transforms
 # Logging with Tensorboard or Weights and Biases
 # If you run this code on Colab, remember to install pytorch_lightning
 # !pip install --quiet --upgrade pytorch_lightning
-from pytorch_lightning.loggers import TensorBoardLogger, WandbLogger
+# from pytorch_lightning.loggers import TensorBoardLogger, WandbLogger
 
 from model.EquiVSet_trainer import EquiVSetTrainer
 from data_loader import TwoMoons, GaussianMixture,Amazon, CelebA, SetPDBBind, SetBindingDB
@@ -166,9 +166,9 @@ if __name__ == "__main__":
                                   test_loader=test_loader,
                                   num_epochs=10)
 
-    print(f'Training loss: {metrics["train/loss"]}')
+    print(f'Training Loss: {metrics["train/loss"]:.2f}')
     # print(f'Training Jaccard index: {metrics["train/jaccard"]}')
     # print(f'Validation loss: {metrics["val/loss"]}')
-    print(f'Validation Jaccard index: {metrics["val/jaccard"]}')
+    print(f'Validation Jaccard Index: {metrics["val/jaccard"]:.2f}')
     # print(f'Test loss: {metrics["test/loss"]}')
-    print(f'Test Jaccard index: {metrics["test/jaccard"]}')
+    print(f'Test Jaccard Index: {metrics["test/jaccard"]:.2f}')

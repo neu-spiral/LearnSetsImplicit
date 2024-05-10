@@ -349,7 +349,8 @@ class TrainerModule(nn.Module):  # why did they define it without nn.Module?
             append_dict(train_metric_dict, train_metrics)
             self.logger.log_metrics(train_metrics, step=epoch_idx)
             self.save_metrics('train', train_metrics)
-            print(f'Epoch {epoch_idx}|Train loss: {train_loss["train/loss"]:.2f} Train jc: {train_metrics["train/jaccard"]:.2f}\n')
+            print(f'Epoch {epoch_idx} | Training Loss: {train_loss["train/loss"]:.2f} '
+                  f'Training Jaccard Index: {train_metrics["train/jaccard"]:.2f}\n')
 
             self.on_training_epoch_end(epoch_idx)
             # Validation every N epochs

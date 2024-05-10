@@ -1,7 +1,7 @@
 # Standard libraries
 import os
 import sys
-from typing import Any, Sequence, Optional, Tuple, Iterator, Dict, Callable, Union, List
+from typing import Any, Optional, Iterator, Dict, Callable, Union, List
 import json
 import time
 from tqdm.auto import tqdm
@@ -27,11 +27,10 @@ import torch.utils.data as data
 # Logging with Tensorboard or Weights and Biases
 # If you run this code on Colab, remember to install pytorch_lightning
 # !pip install --quiet --upgrade pytorch_lightning
-from pytorch_lightning.loggers import TensorBoardLogger, WandbLogger
+# from pytorch_lightning.loggers import TensorBoardLogger, WandbLogger
 
 from model.trainer_module import TrainerModule
 from model.set_functions_flax import SetFunction, RecNet, MFVI
-from utils.flax_evaluation import compute_metrics
 from jax.experimental.host_callback import call
 
 
@@ -76,7 +75,8 @@ class EquiVSetTrainer(TrainerModule):
                     metrics[key] = [step_metrics[key]]
             # num_elements += batch_size
 
-        metrics = {(log_prefix + key): 1*np.array(jnp.concatenate(metrics[key], axis=0).mean(0)) for key in metrics}  # convert to numpy
+        # convert to numpy
+        metrics = {(log_prefix + key): 1 * np.array(jnp.concatenate(metrics[key], axis=0).mean(0)) for key in metrics}
         return metrics
 
     def create_functions(self):
@@ -95,7 +95,8 @@ class EquiVSetTrainer(TrainerModule):
 
             for i in range(self.model_hparams['params'].RNN_steps):
                 # sample_matrix_1, sample_matrix_0 = MC_sampling(q, self.model_hparams['params'].num_samples)
-                model = self.model.bind({'params': state.params})
+                # model = self.model.bind({'params': state.params})
+                model = self.bind_model()
                 # mfvi = MFVI(nn.Dense(features=256), FF(self.dim_feature, 500, 1, self.model_hparams.num_layers),
                 #             self.model_hparams['params'])
                 mfvi = model.mfvi.bind({'params': state.params['fixed_point_layer']['mfvi_params']['params']})
