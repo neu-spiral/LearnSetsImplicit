@@ -30,7 +30,7 @@ import torch.utils.data as data
 # from pytorch_lightning.loggers import TensorBoardLogger, WandbLogger
 
 from model.trainer_module import TrainerModule
-from model.set_functions_flax import SetFunction, RecNet, MFVI
+from model.set_functions_flax import SetFunction, RecNet  #, MFVI
 from jax.experimental.host_callback import call
 
 

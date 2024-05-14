@@ -68,26 +68,79 @@ class SigmoidImplicitLayer(nn.Module):  # JAXOpt solves this for us using implic
     mfvi: Callable
     fixed_point_solver: Any  # AndersonAcceleration or FixedPointIteration
 
+    # def setup(self):
+    #     self.init = lambda rng, q, V: self.mfvi.init(rng, q, V)
+        # self.mfvi_params = self.param("mfvi_params", self.init, q_init, V)
+
     # @partial(nn.transforms.vmap,
     #          variable_axes={'params': None},
     #          split_rngs={'params': False},
     #          in_axes=(None, 0))
+    # @partial(
+    #     nn.transforms.scan,
+    #     variable_broadcast='params',
+    #     split_rngs={'params': False})
     @nn.compact
     def __call__(self, q_init, V, **kwargs):
         # q = q_init
         init = lambda rng, q, V: self.mfvi.init(rng, q, V)
+        # # if self.is_initializing():
         mfvi_params = self.param("mfvi_params", init, q_init, V)
+        # # mfvi_params = self.mfvi.init(jax.random.key(42), q_init, V)
 
         def mfvi_apply(q, V, mfvi_params):
-            return self.mfvi.apply(mfvi_params, q, V)
+            q, mfvi_params = self.mfvi.apply(mfvi_params, q, V, mutable=True)
+            return q
+        # def mfvi_apply(q, V):
+        #     q = self.mfvi(q, V)
+        #     return q
 
         solver = self.fixed_point_solver(fixed_point_fun=mfvi_apply)
 
         def batch_run(q, V, mfvi_params):
             # print(solver.run(V_dummy, q, init_params).params)
-            return solver.run(q, V, mfvi_params)
+            return solver.run(q, V, mfvi_params)[0]
+
+        # def batch_run(q, V):
+        #     # print(solver.run(V_dummy, q, init_params).params)
+        #     return solver.run(q, V)[0]
 
         # We use vmap since we want to compute the fixed point separately for each
         # example in the batch.
-        # return jax.vmap(batch_run, in_axes=(0, None, None), out_axes=0)(q_init, V, mfvi_params)  # understand what vmap does and modify this line
-        return batch_run(q_init, V, mfvi_params)[0]
+        # return jax.vmap(batch_run, in_axes=(0, 0, None), out_axes=0)(q_init, V, mfvi_params)  # understand what vmap does and modify this line
+        return batch_run(q_init, V, mfvi_params)
+        # return batch_run(q_init, V)
+
+
+# class SigmoidImplicitLayer(nn.Module):  # JAXOpt solves this for us using implicit differentiation
+#     mfvi: Callable
+#     fixed_point_solver: Any  # AndersonAcceleration or FixedPointIteration
+#
+#     # def setup(self):
+#     #     self.init = lambda rng, q, V: self.mfvi.init(rng, q, V)
+#         # self.mfvi_params = self.param("mfvi_params", self.init, q_init, V)
+#
+#     # @partial(nn.transforms.vmap,
+#     #          variable_axes={'params': None},
+#     #          split_rngs={'params': False},
+#     #          in_axes=(None, 0))
+#     @nn.compact
+#     def __call__(self, q_init, V, **kwargs):
+#         # q = q_init
+#         # init = lambda rng, q, V: self.mfvi.init(rng, q, V)
+#         # if self.is_initializing():
+#         # mfvi_params = self.param("mfvi_params", self.init, q_init, V)
+#
+#         def mfvi_apply(q, V):
+#             return self.mfvi(q, V)
+#
+#         solver = self.fixed_point_solver(fixed_point_fun=mfvi_apply)
+#
+#         def batch_run(q, V):
+#             # print(solver.run(V_dummy, q, init_params).params)
+#             return solver.run(q, V).params
+#
+#         # We use vmap since we want to compute the fixed point separately for each
+#         # example in the batch.
+#         return jax.vmap(batch_run, in_axes=(None, 1), out_axes=0)(q_init, V)  # understand what vmap does and modify this line
+#         # return batch_run(q_init, V)

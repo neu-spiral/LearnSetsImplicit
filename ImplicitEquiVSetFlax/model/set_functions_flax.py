@@ -12,9 +12,142 @@ from utils.flax_helper import FF, normal_cdf
 from utils.implicit import SigmoidFixedPointLayer, SigmoidImplicitLayer
 
 
+# noinspection PyAttributeOutsideInit
+# class SetFunction(nn.Module):
+#     """
+#         Definition of the set function (F_θ) using a NN.
+#     """
+#     params: dict
+#     dim_feature: int = 256
+#
+#     def setup(self):
+#         self.init_layer = self.define_init_layer()
+#         self.ff = FF(self.dim_feature, 500, 1, self.params.num_layers)
+#         # self.fixed_point_layer = self.define_fixed_point_layer()
+#
+#     def define_init_layer(self):
+#         """
+#         Returns the initial layer custom to different setups.
+#         :return: InitLayer
+#         """
+#         return nn.Dense(features=self.dim_feature)
+#
+#     # def define_fixed_point_layer(self):
+#     #     """
+#     #
+#     #     :return:
+#     #     """
+#     #     if not self.params.IFT:
+#     #         return SigmoidFixedPointLayer(mfvi)
+#     #     if self.params.bwd_solver == 'normal_cg':
+#     #         implicit_solver = partial(solve_normal_cg, tol=1e-3, maxiter=20)
+#     #     if self.params.fwd_solver == 'fpi':
+#     #         fixed_point_solver = partial(FixedPointIteration,
+#     #                                      maxiter=5,
+#     #                                      tol=1e-3, implicit_diff=True,
+#     #                                      implicit_diff_solve=implicit_solver,
+#     #                                      verbose=True)
+#     #     return SigmoidImplicitLayer(mfvi=self.mean_field_iteration,
+#     #                                 fixed_point_solver=fixed_point_solver)
+#
+#     def MC_sampling(self, q, M, derandomize=False):
+#         """
+#         Bernoulli sampling using q as parameters.
+#         Args:
+#             q: parameter of Bernoulli distribution (ψ in the paper)
+#             M: number of samples (m in the paper)
+#
+#         Returns:
+#             Sampled subsets F(S+i), F(S)
+#             :param derandomize:
+#
+#         """
+#         bs, vs = q.shape
+#         if derandomize:
+#             # same sample is used for each coordinate
+#             q = jnp.broadcast_to(q.reshape(bs, 1, vs), (bs, M, vs))
+#         else:
+#             # a new sample is generated for each coordinate
+#             q = jnp.broadcast_to(q.reshape(bs, 1, 1, vs), (bs, M, vs, vs))
+#         # bs = the batch size
+#         q = jax.device_put(q)
+#         sample_matrix = jax.random.bernoulli(jax.random.PRNGKey(758493), q)
+#         if derandomize:
+#             sample_matrix = jnp.broadcast_to(sample_matrix.reshape(bs, M, 1, vs), (bs, M, vs, vs))
+#
+#         mask = jnp.expand_dims(jnp.concatenate([jnp.expand_dims(jnp.eye(vs, vs), axis=0) for _ in range(M)], axis=0),
+#                                axis=0)
+#
+#         matrix_0 = sample_matrix * (1 - mask)  # element_wise multiplication
+#         matrix_1 = matrix_0 + mask
+#         return matrix_1, matrix_0  # F([x]_+i), F([x]_- i)
+#
+#     def F_S(self, V, subset_mat, fpi=False):
+#         if fpi:
+#             fea = self.init_layer(V).reshape(subset_mat.shape[0], 1, -1, self.dim_feature)
+#         else:
+#             # to encode variational dist
+#             fea = self.init_layer(V).reshape(subset_mat.shape[0], -1, self.dim_feature)
+#         fea = subset_mat @ fea
+#         fea = self.ff(fea)  # goes through FF block
+#         return fea
+#
+#     def grad_F_S(self, V, subset_i, subset_not_i):
+#         F_1 = self.F_S(V, subset_i, fpi=True).squeeze(-1)
+#         F_0 = self.F_S(V, subset_not_i, fpi=True).squeeze(-1)
+#         return (F_1 - F_0).mean(1)
+#
+#     def mean_field_iteration(self, q, V):  # ψ_i in the paper
+#         subset_i, subset_not_i = self.MC_sampling(q, self.params.num_samples)  # returns S+i , S
+#         q = jax.nn.sigmoid(self.grad_F_S(V, subset_i, subset_not_i))
+#         return q
+#
+#     def cross_entropy(self, q, S, neg_S):  # Eq. (5) in the paper
+#         loss = - jnp.sum((S * jnp.log(q + 1e-12) + (1 - S) * jnp.log(1 - q + 1e-12)) * neg_S, axis=-1)
+#         return loss.mean()
+#
+#     def __call__(self, V, S, neg_S, **kwargs):
+#         """"returns cross-entropy loss."""
+#         bs, vs = V.shape[:2]
+#         q_init = .5 * jnp.ones((bs, vs))  # ψ_0 <-- 0.5 * vector(1)
+#         # if not self.params.IFT:
+#         #     q, _, _ = self.fixed_point_layer(q_init, V)
+#         # else:
+#         #     q = self.fixed_point_layer(q_init, V)
+#         if self.params.bwd_solver == 'normal_cg':
+#             implicit_solver = partial(solve_normal_cg, tol=1e-3, maxiter=20)
+#         if self.params.fwd_solver == 'fpi':
+#             fixed_point_solver = partial(FixedPointIteration,
+#                                          maxiter=5,
+#                                          tol=1e-3, implicit_diff=True,
+#                                          implicit_diff_solve=implicit_solver,
+#                                          verbose=True)
+#
+#         solver = fixed_point_solver(fixed_point_fun=self.mean_field_iteration)
+#         q = solver.run(q_init, V).params
+#
+#         # q = q_init
+#         # iterations = 0
+#         # last_err = float('inf')
+#         #
+#         # # iterate until convergence
+#         # while iterations < 20:
+#         #     q_next = self.mfvi(q, V)
+#         #     err = jnp.linalg.norm(q - q_next)
+#         #     print(err)
+#         #     q = q_next
+#         #     iterations += 1
+#         #     # if err < 1e-3:
+#         #     #     break
+#         #     last_err = err
+#
+#         loss = self.cross_entropy(q, S, neg_S)
+#         return loss
+
+
 class MFVI(nn.Module):
-    init_layer: Callable  # nn.Module
-    ff: Callable  # nn.Module
+    # init_layer: Callable  # nn.Module
+    # ff: Callable  # nn.Module
     params: dict
     dim_feature: int = 256
 
@@ -51,26 +184,51 @@ class MFVI(nn.Module):
         matrix_1 = matrix_0 + mask
         return matrix_1, matrix_0  # F([x]_+i), F([x]_- i)
 
-    def F_S(self, V, subset_mat, fpi=False):
-        if fpi:
-            fea = self.init_layer(V).reshape(subset_mat.shape[0], 1, -1, self.dim_feature)
-        else:
-            # to encode variational dist
-            fea = self.init_layer(V).reshape(subset_mat.shape[0], -1, self.dim_feature)
-        fea = subset_mat @ fea
-        fea = self.ff(fea)  # goes through FF block
-        return fea
+    def define_init_layer(self):
+        """
+        Returns the initial layer custom to different setups.
+        :return: InitLayer
+        """
+        return nn.Dense(features=self.dim_feature)
 
-    def grad_F_S(self, V, subset_i, subset_not_i):
-        F_1 = self.F_S(V, subset_i, fpi=True).squeeze(-1)
-        F_0 = self.F_S(V, subset_not_i, fpi=True).squeeze(-1)
-        return (F_1 - F_0).mean(1)
+    # def F_S(self, V, subset_mat, fpi=False):
+    #     if fpi:
+    #         fea = self.init_layer(V).reshape(subset_mat.shape[0], 1, -1, self.dim_feature)
+    #     else:
+    #         # to encode variational dist
+    #         fea = self.init_layer(V).reshape(subset_mat.shape[0], -1, self.dim_feature)
+    #     fea = subset_mat @ fea
+    #     fea = self.ff(fea)  # goes through FF block
+    #     return fea
+    #
+    # def grad_F_S(self, V, subset_i, subset_not_i):
+    #     F_1 = self.F_S(V, subset_i, fpi=True).squeeze(-1)
+    #     F_0 = self.F_S(V, subset_not_i, fpi=True).squeeze(-1)
+    #     return (F_1 - F_0).mean(1)
 
     @nn.compact
     def __call__(self, q, V):  # ψ_i in the paper
         subset_i, subset_not_i = self.MC_sampling(q, self.params.num_samples)  # returns S+i , S
-        q = jax.nn.sigmoid(self.grad_F_S(V, subset_i, subset_not_i))
+        init_layer = self.define_init_layer()
+        ff = FF(self.dim_feature, 500, 1, self.params.num_layers)
+
+        fea_1 = init_layer(V).reshape(subset_i.shape[0], 1, -1, self.dim_feature)
+        fea_1 = subset_i @ fea_1
+        fea_1 = ff(fea_1).squeeze(-1)
+
+        fea_0 = init_layer(V).reshape(subset_not_i.shape[0], 1, -1, self.dim_feature)
+        fea_0 = subset_not_i @ fea_0
+        fea_0 = ff(fea_0).squeeze(-1)
+
+        # q = jax.nn.sigmoid(self.grad_F_S(V, subset_i, subset_not_i))
+        q = jax.nn.sigmoid((fea_1 - fea_0).mean(1))
         return q
+
+class CrossEntropy(nn.Module):
+    @nn.compact
+    def __call__(self, q, S, neg_S):  # Eq. (5) in the paper
+        loss = - jnp.sum((S * jnp.log(q + 1e-12) + (1 - S) * jnp.log(1 - q + 1e-12)) * neg_S, axis=-1)
+        return loss.mean()
 
 
 # noinspection PyAttributeOutsideInit
@@ -82,17 +240,19 @@ class SetFunction(nn.Module):
     dim_feature: int = 256
 
     def setup(self):
-        self.init_layer = self.define_init_layer()
-        self.ff = FF(self.dim_feature, 500, 1, self.params.num_layers)
-        self.mfvi = MFVI(self.init_layer, self.ff, self.params)
+        # self.init_layer = self.define_init_layer()
+        # self.ff = FF(self.dim_feature, 500, 1, self.params.num_layers)
+        # self.mfvi = MFVI(self.init_layer, self.ff, self.params)
+        self.mfvi = MFVI(self.params)
         self.fixed_point_layer = self.define_fixed_point_layer(self.mfvi)
+        self.cross_entropy = CrossEntropy()
 
-    def define_init_layer(self):
-        """
-        Returns the initial layer custom to different setups.
-        :return: InitLayer
-        """
-        return nn.Dense(features=self.dim_feature)
+    # def define_init_layer(self):
+    #     """
+    #     Returns the initial layer custom to different setups.
+    #     :return: InitLayer
+    #     """
+    #     return nn.Dense(features=self.dim_feature)
 
     def define_fixed_point_layer(self, mfvi):
         """
@@ -105,23 +265,39 @@ class SetFunction(nn.Module):
             implicit_solver = partial(solve_normal_cg, tol=1e-3, maxiter=20)
         if self.params.fwd_solver == 'fpi':
             fixed_point_solver = partial(FixedPointIteration,
-                                         maxiter=20,
+                                         maxiter=4,
                                          tol=1e-3, implicit_diff=True,
-                                         implicit_diff_solve=implicit_solver)
+                                         implicit_diff_solve=implicit_solver,
+                                         verbose=True)
         return SigmoidImplicitLayer(mfvi=mfvi, fixed_point_solver=fixed_point_solver)
 
-    def cross_entropy(self, q, S, neg_S):  # Eq. (5) in the paper
-        loss = - jnp.sum((S * jnp.log(q + 1e-12) + (1 - S) * jnp.log(1 - q + 1e-12)) * neg_S, axis=-1)
-        return loss.mean()
+    # def cross_entropy(self, q, S, neg_S):  # Eq. (5) in the paper
+    #     loss = - jnp.sum((S * jnp.log(q + 1e-12) + (1 - S) * jnp.log(1 - q + 1e-12)) * neg_S, axis=-1)
+    #     return loss.mean()
 
     def __call__(self, V, S, neg_S, **kwargs):
         """"returns cross-entropy loss."""
         bs, vs = V.shape[:2]
-        q_init = .5 * jnp.ones((bs, vs))  # ψ_0 <-- 0.5 * vector(1)
+        q = .5 * jnp.ones((bs, vs))  # ψ_0 <-- 0.5 * vector(1)
         if not self.params.IFT:
             q, _, _ = self.fixed_point_layer(q_init, V)
         else:
-            q = self.fixed_point_layer(q_init, V)
+            q = self.fixed_point_layer(q, V)
+
+        # q = q_init
+        # iterations = 0
+        # last_err = float('inf')
+        #
+        # # iterate until convergence
+        # while iterations < 20:
+        #     q_next = self.mfvi(q, V)
+        #     err = jnp.linalg.norm(q - q_next)
+        #     print(err)
+        #     q = q_next
+        #     iterations += 1
+        #     # if err < 1e-3:
+        #     #     break
+        #     last_err = err
 
         loss = self.cross_entropy(q, S, neg_S)
         return loss
