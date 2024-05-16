@@ -42,10 +42,10 @@ class SetPDBBind(object):
                 os.makedirs(data_root)
             pickle.dump((trainData, valData, testData), open(data_path, "wb"))
 
-    def get_loaders(self, batch_size, num_workers, shuffle_train=False, get_test=True):
-        train_dataset = SetDataset(self.dataset, self.V_train, self.S_train, self.params, is_train=True)
-        val_dataset = SetDataset(self.dataset, self.V_val, self.S_val, self.params)
-        test_dataset = SetDataset(self.dataset, self.V_test, self.S_test, self.params)
+    def get_loaders(self, batch_size, num_workers, shuffle_train=False, get_test=True, transform=None):
+        train_dataset = SetDataset(self.dataset, self.V_train, self.S_train, self.params, is_train=True, transform=transform)
+        val_dataset = SetDataset(self.dataset, self.V_val, self.S_val, self.params, transform=transform)
+        test_dataset = SetDataset(self.dataset, self.V_test, self.S_test, self.params, transform=transform)
 
         train_loader = DataLoader(dataset=train_dataset, batch_size=batch_size,
                                     collate_fn=collate_train, pin_memory=True, shuffle=shuffle_train, num_workers=num_workers)
@@ -84,12 +84,13 @@ def collate_val_and_test(data):
     return bg, S
 
 class SetDataset(Dataset):
-    def __init__(self, dataset, V_idxs, S_idxs, params, is_train=False):
+    def __init__(self, dataset, V_idxs, S_idxs, params, is_train=False, transform=None):
         _, self.graphs, _ = dataset
         self.V_idxs, self.S_idxs = V_idxs, S_idxs
         self.is_train = is_train
         self.neg_num = params.neg_num
         self.v_size = params.v_size
+        self.transform = transform
     
     def __getitem__(self, index):
         V_idxs, S = np.array(self.V_idxs[index]), np.array(self.S_idxs[index])
@@ -103,8 +104,12 @@ class SetDataset(Dataset):
             neg_S_mask = torch.zeros([self.v_size])
             neg_S_mask[S] = 1
             neg_S_mask[neg_S] = 1
+            if self.transform:
+                V_graphs, S_mask, neg_S_mask = self.transform(V_graphs), self.transform(S_mask), self.transform(neg_S_mask)
             return V_graphs, S_mask, neg_S_mask
-        
+
+        if self.transform:
+            V_graphs, S_mask = self.transform(V_graphs), self.transform(S_mask)
         return V_graphs, S_mask
 
     def __len__(self):
