@@ -20,6 +20,7 @@ smile_list = ['o', 'N', '/', 'H', '#', 'C', 'i', '+', 'l', '@', '8', '-', '6', '
 CHARCANSMILEN = len(smile_list)
 CHARCANSMIDIC = { smile_list[idx]: idx for idx in range(len(smile_list))}
 
+
 class Tokenizer():
     @staticmethod
     def seq_tokenizer(seq, type_):
@@ -52,7 +53,7 @@ class SetBindingDB(object):
         V_size, S_size = self.params.v_size, self.params.s_size
         self.dataset = load_bindingdb(self.params)
 
-        data_root = './root/dataset/bindingdb'
+        data_root = './dataset/bindingdb'
         data_path = os.path.join(data_root, 'bindingdb_set_data.pkl')
         if os.path.exists(data_path):
             print(f'load data from {data_path}')
@@ -72,10 +73,10 @@ class SetBindingDB(object):
                 os.makedirs(data_root)
             pickle.dump((trainData, valData, testData), open(data_path, "wb"))
 
-    def get_loaders(self, batch_size, num_workers, shuffle_train=False, get_test=True):
-        train_dataset = SetDataset(self.dataset, self.V_train, self.S_train, self.params, is_train=True)
-        val_dataset = SetDataset(self.dataset, self.V_val, self.S_val, self.params)
-        test_dataset = SetDataset(self.dataset, self.V_test, self.S_test, self.params)
+    def get_loaders(self, batch_size, num_workers, shuffle_train=False, get_test=True, transform=None):
+        train_dataset = SetDataset(self.dataset, self.V_train, self.S_train, self.params, is_train=True, transform=transform)
+        val_dataset = SetDataset(self.dataset, self.V_val, self.S_val, self.params, transform=transform)
+        test_dataset = SetDataset(self.dataset, self.V_test, self.S_test, self.params, transform=transform)
 
         train_loader = DataLoader(dataset=train_dataset, batch_size=batch_size,
                                     collate_fn=collate_train, pin_memory=True, shuffle=shuffle_train, num_workers=num_workers)
@@ -116,12 +117,13 @@ def collate_val_and_test(data):
     return (b_D, b_P), S
 
 class SetDataset(Dataset):
-    def __init__(self, dataset, V_idxs, S_idxs, params, is_train=False):
+    def __init__(self, dataset, V_idxs, S_idxs, params, is_train=False, transform=None):
         self.drugs, self.targets = dataset['Drug'], dataset['Target']
         self.V_idxs, self.S_idxs = V_idxs, S_idxs
         self.is_train = is_train
         self.neg_num = params.neg_num
         self.v_size = params.v_size
+        self.transform = transform
 
     def __getitem__(self, index):
         V_idxs, S = np.array(self.V_idxs[index]), np.array(self.S_idxs[index])
@@ -136,8 +138,12 @@ class SetDataset(Dataset):
             neg_S_mask = torch.zeros([self.v_size])
             neg_S_mask[S] = 1
             neg_S_mask[neg_S] = 1
+            if self.transform:
+                V_drug, V_target, S_mask, neg_S_mask = self.transform(V_drug), self.transform(V_target), self.transform(S_mask), self.transform(neg_S_mask)
             return V_drug, V_target, S_mask, neg_S_mask
 
+        if self.transform:
+            V_drug, V_target, S_mask = self.transform(V_drug), self.transform(V_target), self.transform(S_mask)
         return V_drug, V_target, S_mask
 
     def __len__(self):
