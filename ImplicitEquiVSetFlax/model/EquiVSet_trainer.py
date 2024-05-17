@@ -18,6 +18,7 @@ import jax.numpy as jnp
 from jax import random
 from flax import linen as nn
 from flax.training import train_state, checkpoints
+from functools import partial
 import optax
 
 # PyTorch for data loading
@@ -30,7 +31,7 @@ import torch.utils.data as data
 # from pytorch_lightning.loggers import TensorBoardLogger, WandbLogger
 
 from model.trainer_module import TrainerModule
-from model.set_functions_flax import SetFunction, RecNet  #, MFVI
+from model.set_functions_flax import SetFunction, RecNet  # , MFVI
 from jax.experimental.host_callback import call
 
 
@@ -65,8 +66,11 @@ class EquiVSetTrainer(TrainerModule):
         metrics = defaultdict(List)  # defaultdict(float)
         # jc_list = []
         for batch in data_loader:
-            # V_set, S_set, neg_S_set = batch
-            step_metrics = self.eval_step(self.state, batch)  # assume this returns jc
+            if len(batch) == 3:
+                V_set, S_set, _ = batch
+            elif len(batch) == 2:
+                V_set, S_set = batch
+            step_metrics = self.eval_step(self.state, V_set, S_set)  # assume this returns jc
             # batch_size = batch[0].shape[0] if isinstance(batch, (list, tuple)) else batch.shape[0]
             for key in step_metrics:  # metrics[key] = jc_list
                 if key in metrics:
@@ -87,11 +91,14 @@ class EquiVSetTrainer(TrainerModule):
             # jax.debug.print("neg_S is {neg_S}", neg_S=neg_S)
             return self.model.apply({'params': params}, V, S, neg_S)
 
-        def inference(state, V, bs):
+        def inference(state, V):
             # V, S, neg_S = batch
             bs, vs = V.shape[:2]
+            if self.model_hparams['params'].data_name == 'celeba':
+                bs = int(bs / 8)
+                vs = self.model_hparams['params'].v_size
             q = .5 * jnp.ones((bs, vs))
-            print(state.params)
+            # print(state.params)
 
             for i in range(self.model_hparams['params'].RNN_steps):
                 # sample_matrix_1, sample_matrix_0 = MC_sampling(q, self.model_hparams['params'].num_samples)
@@ -112,27 +119,30 @@ class EquiVSetTrainer(TrainerModule):
             metrics = {'loss': loss}
             return state, metrics
 
-        def eval_step(state, batch):
-            if len(batch) == 3:
-                V_set, S_set, neg_S_set = batch
-            elif len(batch) == 2:
-                V_set, S_set = batch
+        def eval_step(state, V_set, S_set):
+            # if len(batch) == 3:
+            #     V_set, S_set, _ = batch
+            # elif len(batch[0]) == 2:
+            #     V_set, S_set = batch
 
-            q = inference(state, V_set, S_set.shape[0])
-            # idx = jnp.argpartition(q, -S_set.shape[-1], axis=1)  # [-S_set.shape[-1]:]
+            q = inference(state, V_set)
             _, idx = jax.lax.top_k(q, S_set.shape[-1])
+
             # call(lambda x: print(f"shape[0] {x}"), S_set.shape[0])  # 128
             # call(lambda x: print(f"shape[-1] {x}"), S_set.shape[-1])  # 100
             # call(lambda x: print(f"len idx {x}"), len(idx))  # 100
+            # call(lambda x: print(f"idx: {x}"), idx)
 
             pre_list = []
-            # s_size = jnp.sum(S_set[0]).astype(int)  # needs s_size as input
             for i in range(len(idx)):
                 pre_mask = jnp.zeros([S_set.shape[-1]])
-                # print(np.array(jnp.sum(S_set[i])))
                 # call(lambda x: print(f"sum is {x}"), jnp.sum(S_set[i]))
-                ids = idx[i][:self.model_hparams['params'].s_size]  # this needs static slicing
-                pre_mask = pre_mask.at[ids].set(1)
+                s_size = jnp.sum(S_set[i]).astype(int)  # needs s_size as input
+                mask = jnp.where(jnp.arange(S_set.shape[-1]) < s_size, True, False)
+                ids = idx[i] * mask
+                # call(lambda x: print(f"ids: {x}"), ids)
+                pre_mask = pre_mask.at[ids].set(1)  # , mode='drop')
+                # call(lambda x: print(f"pre_mask: {x}"), pre_mask)
                 pre_list.append(jnp.expand_dims(pre_mask, axis=0))
             pre_mask = jnp.concatenate(pre_list, axis=0)
             true_mask = S_set
