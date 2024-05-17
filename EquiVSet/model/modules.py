@@ -59,10 +59,12 @@ class SetFunction(nn.Module):  # nn.Module is the base class for all NN modules.
 
         """
         bs, vs = q.shape
+
         q = q.reshape(bs, 1, 1, vs).expand(bs, M, vs, vs)
         sample_matrix = torch.bernoulli(q)
 
         mask = torch.cat([torch.eye(vs, vs).unsqueeze(0) for _ in range(M)], dim=0).unsqueeze(0).to(q.device)
+        # print(f"shape of mask is {mask.shape}")
         matrix_0 = sample_matrix * (1 - mask)
         matrix_1 = matrix_0 + mask
         return matrix_1, matrix_0  # F([x]_+i), F([x]_- i)
@@ -74,15 +76,20 @@ class SetFunction(nn.Module):  # nn.Module is the base class for all NN modules.
         return q
 
     def cross_entropy(self, q, S, neg_S):  # Eq. (5) in the paper
+        # print(f"shape of S is {S.shape}")
+        # print(f"shape of q is {q.shape}")
         loss = - torch.sum((S * torch.log(q + 1e-12) + (1 - S) * torch.log(1 - q + 1e-12)) * neg_S, dim=-1)
         return loss.mean()
 
     def forward(self, V, S, neg_S, rec_net):  # return cross-entropy loss
         if self.params.mode == 'diffMF':
-            # print(S.shape)
+            # print(f"V shape: {V.shape}")
             # print(neg_S.shape)
-
             bs, vs = V.shape[:2]
+            if self.params.data_name == 'celeba' or self.params.data_name == 'pdbbind':
+                bs = int(bs / 8)
+                vs = self.params.v_size
+
             q = .5 * torch.ones(bs, vs).to(V.device)  # ψ_0 <-- 0.5 * vector(1)
         else:
             # mode == 'ind' or 'copula'
@@ -99,6 +106,8 @@ class SetFunction(nn.Module):  # nn.Module is the base class for all NN modules.
 
     def F_S(self, V, subset_mat, fpi=False):
         # print(V.shape)
+        # print(f"shape of V is {V.shape}")
+        # print(f"shape of the init layer is {self.init_layer(V).shape}")
         # print(self.init_layer(V).shape)
         if fpi:
             # to fix point iteration (aka mean-field iteration)
@@ -106,8 +115,8 @@ class SetFunction(nn.Module):  # nn.Module is the base class for all NN modules.
         else:
             # to encode variational dist
             fea = self.init_layer(V).reshape(subset_mat.shape[0], -1, self.dim_feature)
-        # print(subset_mat.shape)
-        # print(fea.shape)
+        # print(f"subset_mat shape {subset_mat.shape}")  # (bs, M, vs, vs)
+        # print(f"fea shape {fea.shape}")  # (bs, 1, vs, dim_feature)
         fea = subset_mat @ fea
         fea = self.ff(fea)
         return fea
