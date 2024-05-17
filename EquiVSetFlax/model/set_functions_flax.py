@@ -9,7 +9,10 @@ import flax.linen as nn
 import jax.numpy as jnp
 import numpy as np
 from utils.flax_helper import FF, normal_cdf
-
+from model.acnn import ACNN
+from utils.config import ACNN_CONFIG
+from model.celebaCNN import CelebaCNN
+from model.deepDTA import DeepDTA_Encoder
 
 def cross_entropy(q, S, neg_S):  # Eq. (5) in the paper
     # jax.debug.print("S is {S}\n", S=S)
@@ -72,11 +75,19 @@ class SetFunction(nn.Module):  # nn.Module is the base class for all NN modules.
         self.ff = FF(self.dim_feature, 500, 1, self.params.num_layers)
 
     def define_init_layer(self):
-        """
-        Returns the initial layer custom to different setups.
-        :return: InitLayer
-        """
-        return nn.Dense(features=self.dim_feature)
+        data_name = self.params.data_name
+        if data_name == 'celeba':
+            return CelebaCNN()
+        elif data_name == 'pdbbind':
+            return ACNN(hidden_sizes=ACNN_CONFIG['hidden_sizes'],
+                        weight_init_stddevs=ACNN_CONFIG['weight_init_stddevs'],
+                        dropouts=ACNN_CONFIG['dropouts'],
+                        features_to_use=ACNN_CONFIG['atomic_numbers_considered'],
+                        radial=ACNN_CONFIG['radial'])
+        elif data_name == 'bindingdb':
+            return DeepDTA_Encoder()
+        else:
+            return nn.Dense(self.dim_feature)
 
     def mean_field_iteration(self, V, subset_i, subset_not_i):  # ψ_i in the paper
         q = jax.nn.sigmoid((self.grad_F_S(V, subset_i, subset_not_i)).mean(1))
@@ -85,7 +96,11 @@ class SetFunction(nn.Module):  # nn.Module is the base class for all NN modules.
     def __call__(self, V, S, neg_S, **kwargs):
         """"returns cross-entropy loss."""
         bs, vs = V.shape[:2]
+        if self.params.data_name == 'celeba' or self.params.data_name == 'pdbbind':
+            bs = int(bs / 8)
+            vs = self.params.v_size
         q = .5 * jnp.ones((bs, vs))  # ψ_0 <-- 0.5 * vector(1)
+
         # q = jax.random.uniform(jax.random.PRNGKey(758493), shape=(bs, vs))
 
         for i in range(self.params.RNN_steps):  # MFVI K times where K = RNN_steps
@@ -97,14 +112,15 @@ class SetFunction(nn.Module):  # nn.Module is the base class for all NN modules.
         return loss
 
     def F_S(self, V, subset_mat, fpi=False):
-        # print(self.init_layer(V).type)
-        # print(self.init_layer(V).shape)
+        print(self.init_layer(V).shape)
+        print(V.shape)
         if fpi:
             # to fix point iteration (aka mean-field iteration)
             fea = self.init_layer(V).reshape(subset_mat.shape[0], 1, -1, self.dim_feature)
         else:
             # to encode variational dist
             fea = self.init_layer(V).reshape(subset_mat.shape[0], -1, self.dim_feature)
+        print(subset_mat.shape, fea.shape)
         fea = subset_mat @ fea
         fea = self.ff(fea)  # goes thru FF block
         # self.ff.apply(params, fea)

@@ -184,27 +184,55 @@ def list_of_numpy_to_tensor(lst):
 
 # Convert lists to lists of tensors
 
+# def collate_train(data):
+#     V, S, neg_S = map(list, zip(*data))
+#     V = list_of_numpy_to_tensor(V)
+#     S = list_of_numpy_to_tensor(S)
+#     neg_S = list_of_numpy_to_tensor(neg_S)
+#
+#     bs = len(V)
+#
+#     V = torch.cat(V, dim=0)
+#     S = torch.cat(S, dim=0).reshape(bs, -1)
+#     neg_S = torch.cat(neg_S, dim=0).reshape(bs, -1)
+#     V = V.permute(0, 2, 3, 1)
+#     return V, S, neg_S
+#
+# def collate_val_and_test(data):
+#     V, S = map(list, zip(*data))
+#     V = list_of_numpy_to_tensor(V)
+#     S = list_of_numpy_to_tensor(S)
+#     bs = len(V)
+#     V = torch.cat(V, dim=0)
+#     S = torch.cat(S, dim=0).reshape(bs, -1)
+#     V = V.permute(0, 2, 3, 1)
+#     return V, S
+
 def collate_train(data):
     V, S, neg_S = map(list, zip(*data))
-    V = list_of_numpy_to_tensor(V)
-    S = list_of_numpy_to_tensor(S)
-    neg_S = list_of_numpy_to_tensor(neg_S)
-
     bs = len(V)
 
-    V = torch.cat(V, dim=0)
-    S = torch.cat(S, dim=0).reshape(bs, -1)
-    neg_S = torch.cat(neg_S, dim=0).reshape(bs, -1)
+    V = np.concatenate(V, axis=0)
+    S = np.concatenate(S, axis=0)
+    neg_S = np.concatenate(neg_S, axis=0)
+
+    V = np.transpose(V, (0, 2, 3, 1))
+    S = np.reshape(S, (bs, -1))
+    neg_S = np.reshape(neg_S, (bs, -1))
+
     return V, S, neg_S
+
 
 def collate_val_and_test(data):
     V, S = map(list, zip(*data))
-    V = list_of_numpy_to_tensor(V)
-    S = list_of_numpy_to_tensor(S)
     bs = len(V)
 
-    V = torch.cat(V, dim=0)
-    S = torch.cat(S, dim=0).reshape(bs, -1)
+    V = np.concatenate(V, axis=0)
+    S = np.concatenate(S, axis=0)
+
+    V = np.transpose(V, (0, 2, 3, 1))
+    S = np.reshape(S, (bs, -1))
+
     return V, S
 
 

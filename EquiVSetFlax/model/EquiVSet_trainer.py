@@ -19,6 +19,7 @@ from jax import random
 from flax import linen as nn
 from flax.training import train_state, checkpoints
 import optax
+from jax import lax
 
 # PyTorch for data loading
 import torch
@@ -33,6 +34,13 @@ from model.trainer_module import TrainerModule
 from model.set_functions_flax import SetFunction, RecNet, MC_sampling
 from utils.flax_evaluation import compute_metrics
 from jax.experimental.host_callback import call
+
+
+def update_mask(pre_mask, id_):
+    return lax.cond(jnp.isnan(id_),  # Check if id_ is NaN
+                    lambda _: pre_mask,  # If NaN, return pre_mask unchanged
+                    lambda _: pre_mask.at[id_.astype(int)].set(1),  # If not NaN, set the corresponding index to 1
+                    None)
 
 
 class EquiVSetTrainer(TrainerModule):
@@ -85,11 +93,18 @@ class EquiVSetTrainer(TrainerModule):
             # jax.debug.print("V is {V}", V=V)
             # jax.debug.print("S is {S}", S=S)
             # jax.debug.print("neg_S is {neg_S}", neg_S=neg_S)
+            # print("entropy calculated!")
+            # print(f"V is {V.shape}")
+            # print(f"S is {S.shape}")
+            # print(f"neg_S is {neg_S.shape}")
             return self.model.apply({'params': params}, V, S, neg_S)
 
         def inference(state, V, bs):
             # V, S, neg_S = batch
             bs, vs = V.shape[:2]
+            if self.model_hparams['params'].data_name == 'celeba' or self.model_hparams['params'].data_name == 'pdbbind':
+                bs = int(bs / 8)
+                vs = self.model_hparams['params'].v_size
             q = .5 * jnp.ones((bs, vs))
 
             for i in range(self.model_hparams['params'].RNN_steps):
@@ -99,11 +114,13 @@ class EquiVSetTrainer(TrainerModule):
 
         def train_step(state, batch):
             loss_fn = lambda params: entropy_loss(params, batch)
+
             loss, grads = jax.value_and_grad(loss_fn)(state.params)
             # jax.debug.print("loss is {loss}\n", loss=loss)
             # jax.debug.print("grads is {grads}\n", grads=grads)
             state = state.apply_gradients(grads=grads)
             metrics = {'loss': loss}
+            # print(metrics)
             return state, metrics
 
         def eval_step(state, batch):
