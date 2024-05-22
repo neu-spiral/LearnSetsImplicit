@@ -138,8 +138,8 @@ class EquiVSetTrainer(TrainerModule):
                 pre_mask = jnp.zeros([S_set.shape[-1]])
                 # call(lambda x: print(f"sum is {x}"), jnp.sum(S_set[i]))
                 s_size = jnp.sum(S_set[i]).astype(int)  # needs s_size as input
-                mask = jnp.where(jnp.arange(S_set.shape[-1]) < s_size, True, False)
-                ids = idx[i] * mask
+                mask = jnp.where(jnp.arange(S_set.shape[-1]) < s_size, True, self.model_hparams['params'].v_size + 1)
+                ids = (idx[i] + 1) * mask - 1
                 # call(lambda x: print(f"ids: {x}"), ids)
                 pre_mask = pre_mask.at[ids].set(1)  # , mode='drop')
                 # call(lambda x: print(f"pre_mask: {x}"), pre_mask)

@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt
 # !pip install --quiet --upgrade flax optax
 import jax
 import jax.numpy as jnp
+import flax
 from jax import random
 from flax import linen as nn
 from flax.training import train_state, checkpoints
@@ -28,6 +29,9 @@ import torch.utils.data as data
 # If you run this code on Colab, remember to install pytorch_lightning
 # !pip install --quiet --upgrade pytorch_lightning
 from pytorch_lightning.loggers import TensorBoardLogger, WandbLogger
+
+flax.config.update('flax_use_orbax_checkpointing', False)
+
 
 def append_dict(master_dict, sub_dict):
     """
@@ -45,10 +49,10 @@ def append_dict(master_dict, sub_dict):
     return master_dict
 
 
-def plot_dual_metric_dicts(train_loss_list, train_metric_dict, val_metric_dict, dataset):
+def plot_dual_metric_dicts(train_loss_list, train_metric_dict, val_metric_dict, dataset, amazon_cat=None):
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 5))
     ax2.plot(train_loss_list, '-', label=f"Training loss")
-    for line_style, ax, metric_dict in zip(['-','--'], [ax1, ax2], [train_metric_dict, val_metric_dict]):
+    for line_style, ax, metric_dict in zip(['-', '--'], [ax1, ax2], [train_metric_dict, val_metric_dict]):
         keys = list(metric_dict.keys())
         if len(metric_dict) == 2:
             metric1, metric2 = metric_dict[keys[0]], metric_dict[keys[1]]
@@ -71,7 +75,10 @@ def plot_dual_metric_dicts(train_loss_list, train_metric_dict, val_metric_dict, 
         ax2.legend(loc='upper right')
     plt.title(f'{dataset}')
     plt.tight_layout()
-    plt.savefig(f"./plots/plot_{dataset}.png")
+    plot_name = f"./plots/plot_{dataset}"
+    if dataset == 'amazon':
+        plot_name += f"_{amazon_cat}"
+    plt.savefig(plot_name + ".png")
 
 
 class TrainState(train_state.TrainState):
@@ -243,7 +250,7 @@ class TrainerModule(nn.Module):  # why did they define it without nn.Module?
         hparams = copy(self.optimizer_hparams)
 
         # Initialize optimizer
-        optimizer_name = hparams.pop('optimizer', 'adamw')
+        optimizer_name = hparams.pop('optimizer', 'adam')
         if optimizer_name.lower() == 'adam':
             opt_class = optax.adam
         elif optimizer_name.lower() == 'adamw':
@@ -264,12 +271,13 @@ class TrainerModule(nn.Module):  # why did they define it without nn.Module?
             end_value=0.01 * lr
         )
         # Clip gradients at max value, and evt. apply weight decay
-        transf = [optax.clip_by_global_norm(hparams.pop('gradient_clip', 10))]
-        if opt_class == optax.sgd and 'weight_decay' in hparams:  # wd is integrated in adamw
-            transf.append(optax.add_decayed_weights(hparams.pop('weight_decay', 0.0)))
+        transf = [optax.clip_by_global_norm(hparams.pop('clip', 10))]
+        if (opt_class == optax.sgd or opt_class == optax.adamw) and 'weight_decay' in hparams:  # wd is integrated in adamw
+            transf.append(optax.add_decayed_weights(hparams.pop('weight_decay', 1e-5)))
         optimizer = optax.chain(
             *transf,
-            opt_class(lr_schedule, **hparams)
+            # opt_class(lr_schedule, **hparams)
+            opt_class(learning_rate=lr, **hparams)
         )
         # Initialize training state
         self.state = TrainState.create(apply_fn=self.state.apply_fn,
@@ -349,8 +357,8 @@ class TrainerModule(nn.Module):  # why did they define it without nn.Module?
             append_dict(train_metric_dict, train_metrics)
             self.logger.log_metrics(train_metrics, step=epoch_idx)
             self.save_metrics('train', train_metrics)
-            print(f'Epoch {epoch_idx} | Training Loss: {train_loss["train/loss"]:.2f} '
-                  f'Training Jaccard Index: {train_metrics["train/jaccard"]:.2f}\n')
+            print(f'Epoch {epoch_idx} | Training Loss: {train_loss["train/loss"]:.2f} | '
+                  f'Training Jaccard Index: {train_metrics["train/jaccard"]:.2f}', end="")
 
             self.on_training_epoch_end(epoch_idx)
             # Validation every N epochs
@@ -361,25 +369,34 @@ class TrainerModule(nn.Module):  # why did they define it without nn.Module?
                 self.logger.log_metrics(val_metrics, step=epoch_idx)
                 self.save_metrics(f'eval_epoch_{str(epoch_idx).zfill(3)}', val_metrics)
 
-                print(f'Epoch {epoch_idx}|Val jc: {val_metrics["val/jaccard"]:.2f}\n')
+                print(f' | Val JC: {val_metrics["val/jaccard"]:.2f}', end="")
                 # Save best model
                 if self.is_new_model_better(val_metrics, best_eval_metrics):
                     best_eval_metrics = val_metrics
                     best_eval_metrics.update(train_loss)
                     best_eval_metrics.update(train_metrics)
-                    # self.save_model(step=epoch_idx)
-                    # self.save_metrics('best_eval', eval_metrics)
+                    self.save_model(step=epoch_idx)
+                    self.save_metrics('best_eval', val_metrics)
+                    bad_epochs = 0
+                    print(f'\t*Best model so far*')
+                else:
+                    bad_epochs += 1
+                    print(f'\tBad epoch %d' % bad_epochs)
+
+                if bad_epochs > self.model_hparams['params'].num_bad_epochs:
+                    break
             # Test best model if possible
         if test_loader is not None:
-            # self.load_model()
+            self.load_model()
             test_metrics = self.eval_model(test_loader, log_prefix='test/')
             self.logger.log_metrics(test_metrics, step=epoch_idx)
             self.save_metrics('test', test_metrics)
             best_eval_metrics.update(test_metrics)
-            print(f'Epoch {epoch_idx}|Test jc: {test_metrics["test/jaccard"]:.2f}\n')
+            print(f'\nTest JC of the best model: {test_metrics["test/jaccard"]:.2f}')
             # Close logger
         self.logger.finalize('success')
-        plot_dual_metric_dicts(train_loss_list, train_metric_dict, val_metric_dict, self.model_hparams['params'].data_name)
+        plot_dual_metric_dicts(train_loss_list, train_metric_dict, val_metric_dict,
+                               self.model_hparams['params'].data_name, self.model_hparams['params'].amazon_cat)
         return best_eval_metrics
 
     def train_epoch(self,

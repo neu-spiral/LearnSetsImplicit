@@ -32,7 +32,7 @@ from torchvision import transforms
 # from pytorch_lightning.loggers import TensorBoardLogger, WandbLogger
 
 from model.EquiVSet_trainer import EquiVSetTrainer
-from data_loader import TwoMoons, GaussianMixture,Amazon, CelebA, SetPDBBind, SetBindingDB
+from data_loader import TwoMoons, GaussianMixture, Amazon, CelebA, SetPDBBind, SetBindingDB
 import utils.config as config_file
 
 # jax.config.update("jax_debug_nans", True)  # stops execution when nan occurs
@@ -54,7 +54,9 @@ def get_data(params):
     elif data_name == 'bindingdb':
         return SetBindingDB(params)
     else:
-        raise ValueError("Invalid data_name. Supported options are: 'moons', 'gaussian', 'amazon', 'celeba', 'pdbbind', 'bindingdb'")
+        raise ValueError(
+            "Invalid data_name. Supported options are: 'moons', 'gaussian', 'amazon', 'celeba', 'pdbbind', 'bindingdb'")
+
 
 def parse_arguments():
     parser = argparse.ArgumentParser()
@@ -73,7 +75,7 @@ def parse_arguments():
                         help='num layers [%(default)d]')
     parser.add_argument('--batch_size', type=int, default=128,
                         help='batch size [%(default)d]')
-    parser.add_argument('--lr', type=float, default=0.0001,
+    parser.add_argument('--lr', type=float, default=1e-4,
                         help='initial learning rate [%(default)g]')
     parser.add_argument("--weight_decay", type=float, default=1e-5,
                         help='weight decay rate [%(default)g]')
@@ -99,6 +101,8 @@ def parse_arguments():
                         help='num of RNN steps [%(default)d], K in the paper')
     parser.add_argument('--num_samples', type=int, default=5,
                         help='num of Monte Carlo samples [%(default)d]')
+    parser.add_argument('--derandomize', type=bool, default=False,
+                        help='Flag to determine degree of randomization of the Monte-Carlo sampling [%(default)d]')
     parser.add_argument('--rank', type=int, default=5,
                         help='rank of the perturbation matrix [%(default)d]')
     parser.add_argument('--tau', type=float, default=0.1,
@@ -113,12 +117,23 @@ def parse_arguments():
                         help='Implicit differentiation flag [%(default)d]')
     parser.add_argument('--bwd_solver', type=str, default='normal_cg',
                         choices=['normal_cg', 'gmres'],
-                        help='Backward solver choice to be used in backpropagation during implicit differentiation '
+                        help='Backward solver choice to be used in backpropagation during implicit differentiation aka '
+                             'solver of the linear system in implicit differentiation'
                              '[%(default)d]')
+    parser.add_argument('--bwd_maxiter', type=int, default=20,
+                        help='Number of fixed-point iterations [%(default)d]')
+    parser.add_argument('--bwd_tol', type=float, default=1e-2,
+                        help='Tolerance interval of fixed-point iterations [%(default)d]')
     parser.add_argument('--fwd_solver', type=str, default='fpi',
                         choices=['fpi', 'anderson'],
                         help='Forward solver choice to be used in forward pass during implicit differentiation '
                              '[%(default)d]')
+    parser.add_argument('--fwd_maxiter', type=int, default=1,
+                        help='Number of fixed-point iterations [%(default)d]')
+    parser.add_argument('--fwd_tol', type=float, default=1e-2,
+                        help='Tolerance interval of fixed-point iterations [%(default)d]')
+    parser.add_argument('--is_verbose', type=bool, default=False,
+                        help='Verbosity flag for JaxOPT fixed-point iterations [%(default)d]')
     args = parser.parse_args()
     return args
 
@@ -145,9 +160,11 @@ if __name__ == "__main__":
     batch_size = params.batch_size
     num_workers = params.num_workers
 
+
     def tensor_to_numpy(x):
         x = np.array(x, dtype=np.float32)
         return x
+
 
     train_loader, val_loader, test_loader = data.get_loaders(batch_size, num_workers, transform=tensor_to_numpy)
     # print(next(iter(train_loader)))
@@ -164,7 +181,7 @@ if __name__ == "__main__":
     metrics = trainer.train_model(train_loader,
                                   val_loader,
                                   test_loader=test_loader,
-                                  num_epochs=10)
+                                  num_epochs=params.epochs)
 
     print(f'Training Loss: {metrics["train/loss"]:.2f}')
     # print(f'Training Jaccard index: {metrics["train/jaccard"]}')
