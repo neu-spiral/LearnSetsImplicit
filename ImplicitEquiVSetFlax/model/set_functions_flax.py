@@ -1,3 +1,7 @@
+import sys
+
+# setting path
+sys.path.append('../ImplicitEquiVSetFlax')
 import datetime
 import flax
 import flax.linen as nn
@@ -7,6 +11,7 @@ import numpy as np
 from functools import partial
 from jaxopt import AndersonAcceleration, FixedPointIteration
 from jaxopt.linear_solve import solve_gmres, solve_normal_cg
+from model.celebaCNN import CelebaCNN
 from typing import Callable
 from utils.flax_helper import FF, normal_cdf
 from utils.implicit import SigmoidImplicitLayer
@@ -53,6 +58,9 @@ class MFVI(nn.Module):
         Returns the initial layer custom to different setups.
         :return: InitLayer
         """
+        data_name = self.params.data_name
+        if data_name == 'celeba':
+            return CelebaCNN()
         return nn.Dense(features=self.dim_feature)
 
     @nn.compact

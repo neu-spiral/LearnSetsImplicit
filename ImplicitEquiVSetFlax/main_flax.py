@@ -122,15 +122,15 @@ def parse_arguments():
                              '[%(default)d]')
     parser.add_argument('--bwd_maxiter', type=int, default=20,
                         help='Number of fixed-point iterations [%(default)d]')
-    parser.add_argument('--bwd_tol', type=float, default=1e-2,
+    parser.add_argument('--bwd_tol', type=float, default=1e-4,
                         help='Tolerance interval of fixed-point iterations [%(default)d]')
     parser.add_argument('--fwd_solver', type=str, default='fpi',
                         choices=['fpi', 'anderson'],
                         help='Forward solver choice to be used in forward pass during implicit differentiation '
                              '[%(default)d]')
-    parser.add_argument('--fwd_maxiter', type=int, default=1,
+    parser.add_argument('--fwd_maxiter', type=int, default=10,
                         help='Number of fixed-point iterations [%(default)d]')
-    parser.add_argument('--fwd_tol', type=float, default=1e-2,
+    parser.add_argument('--fwd_tol', type=float, default=1e-7,
                         help='Tolerance interval of fixed-point iterations [%(default)d]')
     parser.add_argument('--is_verbose', type=bool, default=False,
                         help='Verbosity flag for JaxOPT fixed-point iterations [%(default)d]')
@@ -167,7 +167,7 @@ if __name__ == "__main__":
 
 
     train_loader, val_loader, test_loader = data.get_loaders(batch_size, num_workers, transform=tensor_to_numpy)
-    # print(next(iter(train_loader)))
+    print(next(iter(train_loader))[0].shape)
 
     trainer = EquiVSetTrainer(params=params,
                               dim_feature=256,

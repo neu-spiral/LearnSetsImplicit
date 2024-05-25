@@ -1,29 +1,27 @@
-import torch.nn as nn
-import torch.nn.functional as F
+from jax import numpy as jnp
+from flax import linen as nn
 
-class celebaCNN(nn.Sequential):
-    def __init__(self):
-        super(celebaCNN, self).__init__()
-
-        in_ch = [3] + [32,64,128]
-        kernels = [3,4,5]
-        strides = [2,2,2]
-        layer_size = 3
-        self.conv = nn.ModuleList([nn.Conv2d(in_channels = in_ch[i], 
-                                                out_channels = in_ch[i+1], 
-                                                kernel_size = kernels[i],
-                                                stride = strides[i]) for i in range(layer_size)])
-        self.conv = self.conv.double()
-        self.fc1 = nn.Linear(128, 256)
-
-    def _forward_features(self, x):
-        for l in self.conv:
-            x = F.relu(l(x))
-        x = F.adaptive_max_pool2d(x, output_size=1)
+class CelebaCNN(nn.Module):
+    def setup(self):
+        self.fc1 = nn.Dense(256)
+    @nn.compact
+    def __call__(self, x):
+        x = self._forward_features(x)
+        x = x.reshape((x.shape[0], -1))
+        x = self.fc1(x)
         return x
 
-    def forward(self, v):
-        v = self._forward_features(v.double())
-        v = v.view(v.size(0), -1)
-        v = self.fc1(v.float())
-        return v
+    def _forward_features(self, x):
+        for i in range(3):
+            x = self.apply_conv(x, i)
+            x = nn.relu(x)
+            x = nn.max_pool(x, window_shape=(2, 2), strides=(2, 2), padding='VALID')  # Max pooling
+        return x
+
+    def apply_conv(self, x, layer_idx):
+        kernel = [3, 4, 5][layer_idx]
+        kernel_size = (kernel, kernel)
+        return nn.Conv(features=[32, 64, 128][layer_idx],
+                       kernel_size=kernel_size,
+                       strides=(2,2),
+                       padding='SAME')(x)
