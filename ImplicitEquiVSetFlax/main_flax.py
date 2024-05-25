@@ -167,7 +167,7 @@ if __name__ == "__main__":
 
 
     train_loader, val_loader, test_loader = data.get_loaders(batch_size, num_workers, transform=tensor_to_numpy)
-    print(next(iter(train_loader))[0].shape)
+    # print(next(iter(train_loader))[0].shape)
 
     trainer = EquiVSetTrainer(params=params,
                               dim_feature=256,
