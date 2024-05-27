@@ -399,8 +399,6 @@ class TrainerModule(nn.Module):  # why did they define it without nn.Module?
         metric_dict.update(best_eval_metrics)
         return metric_dict
 
-    def get_trajectory(self):
-        return
 
     def train_epoch(self,
                     train_loader: Iterator) -> Dict[str, Any]:
