@@ -22,7 +22,7 @@ for data_name in "${data_names[@]}"; do
       for mode in "${modes[@]}"; do
         for ((i=1; i<=repetitions; i++)); do
           # Generate a random seed
-          seed=$RANDOM
+          seed=i
           echo "Running $dir/main.py with --data_name=$data_name --amazon_cat=$amazon_cat --mode=$mode --seed=$seed (Run $i)"
           (cd "$dir" && python main.py equivset --train --cuda --data_name="$data_name" --amazon_cat="$amazon_cat" --mode="$mode" --seed=$seed)
         done
@@ -33,7 +33,7 @@ for data_name in "${data_names[@]}"; do
     for mode in "${modes[@]}"; do
       for ((i=1; i<=repetitions; i++)); do
         # Generate a random seed
-        seed=$RANDOM
+        seed=i
         echo "Running $dir/main.py with --data_name=$data_name --mode=$mode --seed=$seed (Run $i)"
         (cd "$dir" && CUDA_VISIBLE_DEVICES=1 python main.py equivset --train --cuda --data_name="$data_name" --mode="$mode" --seed=$seed)
       done
