@@ -122,6 +122,14 @@ class SetFunction(nn.Module):
                                          tol=self.params.fwd_tol, implicit_diff=self.params.IFT,
                                          implicit_diff_solve=implicit_solver,
                                          verbose=self.params.is_verbose)
+        elif self.params.fwd_solver == 'anderson':
+            fixed_point_solver = partial(AndersonAcceleration,
+                                         history_size=self.params.anderson_hist_size,
+                                         ridge=self.params.anderson_ridge,
+                                         maxiter=self.params.fwd_maxiter,
+                                         tol=self.params.fwd_tol, implicit_diff=self.params.IFT,
+                                         implicit_diff_solve=implicit_solver,
+                                         verbose=self.params.is_verbose)
         return SigmoidImplicitLayer(mfvi=mfvi, fixed_point_solver=fixed_point_solver)
 
     def __call__(self, V, S, neg_S, **kwargs):

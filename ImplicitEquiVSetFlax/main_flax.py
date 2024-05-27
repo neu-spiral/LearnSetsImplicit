@@ -135,6 +135,10 @@ def parse_arguments():
                         help='Tolerance interval of fixed-point iterations [%(default)d]')
     parser.add_argument('--is_verbose', type=bool, default=False,
                         help='Verbosity flag for JaxOPT fixed-point iterations [%(default)d]')
+    parser.add_argument('--anderson_ridge', type=float, default=1e-7,
+                        help='Ridge regularization in Anderson updates [%(default)d]')
+    parser.add_argument('--anderson_hist_size', type=int, default=10,
+                        help='Size of history in Anderson updates [%(default)d]')
     args = parser.parse_args()
     return args
 
