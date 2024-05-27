@@ -10,7 +10,8 @@ import numpy as np
 from copy import copy
 from glob import glob
 from collections import defaultdict
-
+import psutil
+import pandas as pd
 # JAX/Flax
 # If you run this code on Colab, remember to install flax and optax
 # !pip install --quiet --upgrade flax optax
@@ -92,10 +93,10 @@ def parse_arguments():
                         help='num indulged bad epochs [%(default)d]')
     parser.add_argument('--num_workers', type=int, default=2,
                         help='num dataloader workers [%(default)d]')
-    parser.add_argument('--seed', type=int, default=50971,
+    parser.add_argument('--seed', type=int, default=0,
                         help='random seed [%(default)d]')
-    parser.add_argument('--mode', type=str, default='copula',
-                        choices=['diffMF', 'ind', 'copula'],
+    parser.add_argument('--mode', type=str, default='implicit',
+                        choices=['implicit', 'diffMF', 'ind', 'copula'],
                         help='name of the variant model [%(default)s]')
     parser.add_argument('--RNN_steps', type=int, default=1,
                         help='num of RNN steps [%(default)d], K in the paper')
@@ -169,6 +170,11 @@ if __name__ == "__main__":
     train_loader, val_loader, test_loader = data.get_loaders(batch_size, num_workers, transform=tensor_to_numpy)
     # print(next(iter(train_loader))[0].shape)
 
+    start_time = time.time()
+    # Track memory usage before training
+    process = psutil.Process(os.getpid())
+    memory_before = process.memory_info().rss
+
     trainer = EquiVSetTrainer(params=params,
                               dim_feature=256,
                               optimizer_hparams={'lr': 0.0001},
@@ -182,10 +188,54 @@ if __name__ == "__main__":
                                   val_loader,
                                   test_loader=test_loader,
                                   num_epochs=params.epochs)
+    print(metrics)
+    # Track memory usage after training
+    memory_after = process.memory_info().rss
+    memory_used = memory_after - memory_before
 
-    print(f'Training Loss: {metrics["train/loss"]:.2f}')
-    # print(f'Training Jaccard index: {metrics["train/jaccard"]}')
-    # print(f'Validation loss: {metrics["val/loss"]}')
-    print(f'Validation Jaccard Index: {metrics["val/jaccard"]:.2f}')
-    # print(f'Test loss: {metrics["test/loss"]}')
-    print(f'Test Jaccard Index: {metrics["test/jaccard"]:.2f}')
+    # Record end time
+    end_time = time.time()
+    elapsed_time = end_time - start_time
+
+    # Create a dictionary of metrics
+    metrics_dict = {
+        'seed': params.seed,
+        'data_name': params.data_name,
+        'amazon_cat': params.amazon_cat,
+        'mode': params.mode,
+        'best_train_loss': metrics["best_train/loss"],
+        'best_train_jaccard': metrics["best_train/jaccard"],
+        'best_val_jaccard': metrics["best_val/jaccard"],
+        'best_test_jaccard': metrics["best_test/jaccard"],
+        'epoch_time': metrics["best_epoch_time"],
+        'time': elapsed_time,
+        'memory_used_MB': memory_used / (1024 ** 2),
+        'train_loss': metrics["train/loss"],
+        'train_jaccard': metrics["train/jaccard"],
+        'val_jaccard': metrics["val/jaccard"],
+    }
+    # Convert dictionary to DataFrame
+    df_metrics = pd.DataFrame([metrics_dict])
+
+    # Filepath for the output CSV
+    output_filepath = f"../history/metrics_{params.data_name}.csv"
+
+    # Append metrics to CSV
+    if os.path.exists(output_filepath):
+        # If the file exists, load the existing DataFrame and concatenate
+        output = pd.read_csv(output_filepath)
+        output = pd.concat([output, df_metrics], ignore_index=True)
+    else:
+        # If the file does not exist, create a new DataFrame
+        output = df_metrics
+
+    # Save the updated DataFrame to CSV
+    output.to_csv(output_filepath, index=False)
+
+    # Print the head of the DataFrame
+    print(output.head())
+
+    print(f'Training Loss: {metrics["best_train/loss"]:.2f}')
+    print(f'Training Jaccard index: {metrics["best_train/jaccard"]}')
+    print(f'Validation Jaccard Index: {metrics["best_val/jaccard"]:.2f}')
+    print(f'Test Jaccard Index: {metrics["best_test/jaccard"]:.2f}')

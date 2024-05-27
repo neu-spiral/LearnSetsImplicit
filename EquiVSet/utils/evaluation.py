@@ -23,7 +23,7 @@ def compute_metrics(loader, infer_func, v_size, device):
         for i in range(len(idx)):
             pre_mask = torch.zeros([S_set.shape[-1]]).to(device)
             # print(f"Pre mask shape: {pre_mask.shape}")
-            print(int(torch.sum(S_set[i]).item()))
+            # print(int(torch.sum(S_set[i]).item()))
             ids = idx[i][:int(torch.sum(S_set[i]).item())]
             pre_mask[ids] = 1
             pre_list.append(pre_mask.unsqueeze(0))

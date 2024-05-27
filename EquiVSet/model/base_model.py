@@ -57,7 +57,7 @@ class Base_Model(nn.Module):
         random.seed(self.hparams.seed)  # For reproducible random runs
 
         for run_num in range(1, self.hparams.num_runs + 1):
-            state_dict, val_perf, test_perf = self.run_training_session(run_num, logger)
+            state_dict, val_perf, test_perf, metrics_dict = self.run_training_session(run_num, logger)
             val_perfs.append(val_perf)
             test_perfs.append(test_perf)
 
@@ -79,6 +79,7 @@ class Base_Model(nn.Module):
         logger.log('Train:  {:8.2f}'.format(train_perf))
         logger.log('Val:  {:8.2f}'.format(val_perf))
         logger.log('Test: {:8.2f}'.format(test_perf))
+        return metrics_dict
 
     def run_training_session(self, run_num, logger):
         self.train()
@@ -112,10 +113,15 @@ class Base_Model(nn.Module):
             self.hparams.batch_size, self.hparams.num_workers,
             shuffle_train=True, get_test=True)
         best_val_perf = float('-inf')
+        best_train_loss = float('-inf')
         best_state_dict = None
         forward_sum = defaultdict(float)
         num_steps = 0
         bad_epochs = 0
+        train_loss = []
+        train_jc = []
+        val_jc = []
+
 
         times = []
         try:
@@ -162,6 +168,9 @@ class Base_Model(nn.Module):
 
                 train_perf = self.evaluate(train_loader, device)
                 val_perf = self.evaluate(val_loader, device)
+                train_loss.append(forward_sum['entropy']/num_steps)
+                train_jc.append(train_perf)
+                val_jc.append(val_perf)
                 logger.log('End of epoch {:3d}'.format(epoch), False)
                 logger.log(' '.join([' | {:s} {:8.2f}'.format(
                     key, forward_sum[key] / num_steps)
@@ -171,6 +180,8 @@ class Base_Model(nn.Module):
 
                 if val_perf > best_val_perf:
                     best_val_perf = val_perf
+                    best_train_perf = train_perf
+                    best_train_loss = forward_sum['entropy']/num_steps
                     bad_epochs = 0
                     logger.log('\t\t*Best model so far, deep copying*')
                     best_state_dict = deepcopy(self.state_dict())
@@ -186,8 +197,24 @@ class Base_Model(nn.Module):
             logger.log('-' * 89)
             logger.log('Exiting from training early')
 
+        metrics_dict = {
+            'seed': self.hparams.seed,
+            'data_name': self.hparams.data_name,
+            'amazon_cat': self.hparams.amazon_cat,
+            'mode': self.hparams.mode,
+            'best_train_loss': best_train_loss,
+            'best_train_jaccard': best_train_perf,
+            'best_val_jaccard': best_val_perf,
+            'best_test_jaccard': test_perf,
+            'epoch_time': np.mean(times),
+            'train_loss': train_loss,
+            'train_jaccard': train_jc,
+            'val_jaccard': val_jc,
+        }
+
         logger.log("time per training epoch: " + str(np.mean(times)))
-        return best_state_dict, best_val_perf, test_perf
+
+        return best_state_dict, best_val_perf, test_perf, metrics_dict
 
     def evaluate(self, eval_loader, device):
         self.eval()
