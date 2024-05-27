@@ -42,7 +42,7 @@ class MFVI(nn.Module):
             # a new sample is generated for each coordinate
             q = jnp.broadcast_to(q.reshape(bs, 1, 1, vs), (bs, M, vs, vs))
         q = jax.device_put(q)
-        sample_matrix = jax.random.bernoulli(jax.random.PRNGKey(758493), q)
+        sample_matrix = jax.random.bernoulli(jax.random.PRNGKey(self.params.seed), q)
         if derandomize:
             sample_matrix = jnp.broadcast_to(sample_matrix.reshape(bs, M, 1, vs), (bs, M, vs, vs))
 
