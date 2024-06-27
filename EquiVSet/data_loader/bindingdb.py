@@ -95,10 +95,13 @@ def collate_train(data):
     b_D = Tokenizer.tokenizer(b_D, 'drug')
     b_P = Tokenizer.tokenizer(b_P, 'protein')
 
-    b_D = torch.cat(b_D, dim=0)
-    b_P = torch.cat(b_P, dim=0)
-    S = torch.cat(S, dim=0).reshape(bs, -1)
+    b_D = torch.cat(b_D, dim=0)  # shape: torch.Size([1200, 41, 100])
+    b_P = torch.cat(b_P, dim=0)  # shape: torch.Size([1200, 20, 1000])
+    S = torch.cat(S, dim=0).reshape(bs, -1)  # shape: S: torch.Size([4, 300])
     neg_S = torch.cat(neg_S, dim=0).reshape(bs, -1)
+    # print(f"b_D: {b_D.shape}")
+    # print(f"b_P: {b_P.shape}")
+    # print(f"S: {S.shape}")
     return (b_D, b_P), S, neg_S
 
 def collate_val_and_test(data):

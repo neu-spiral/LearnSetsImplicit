@@ -83,14 +83,19 @@ class SetFunction(nn.Module):  # nn.Module is the base class for all NN modules.
 
     def forward(self, V, S, neg_S, rec_net):  # return cross-entropy loss
         if self.params.mode == 'diffMF':
-            # print(f"V shape: {V.shape}")
+            # print(f"V type: {type(V)}")
             # print(neg_S.shape)
-            bs, vs = V.shape[:2]
-            if self.params.data_name == 'celeba' or self.params.data_name == 'pdbbind':
-                bs = int(bs / 8)
+            if self.params.data_name == 'bindingdb':
+                bs = self.params.batch_size
                 vs = self.params.v_size
+                q = .5 * torch.ones(bs, vs).to(S.device)  # ψ_0 <-- 0.5 * vector(1)
+            else:
+                bs, vs = V.shape[:2]
+                if self.params.data_name == 'celeba':
+                    bs = int(bs / 8)
+                    vs = self.params.v_size
+                    q = .5 * torch.ones(bs, vs).to(V.device)  # ψ_0 <-- 0.5 * vector(1)
 
-            q = .5 * torch.ones(bs, vs).to(V.device)  # ψ_0 <-- 0.5 * vector(1)
         else:
             # mode == 'ind' or 'copula'
             q = rec_net.get_vardist(V, S.shape[0]).detach()  # notice the detach here
@@ -109,6 +114,11 @@ class SetFunction(nn.Module):  # nn.Module is the base class for all NN modules.
         # print(f"shape of V is {V.shape}")
         # print(f"shape of the init layer is {self.init_layer(V).shape}")
         # print(self.init_layer(V).shape)
+        # print(f"length of V: {len(V)}")  # length of V: 2
+        # print(f"type of V: {type(V)}")  # type of V: <class 'list'>
+        # print(f"V[0] shape: {V[0].shape}")  # V[0] shape: torch.Size([1200, 41, 100])
+        # print(f"V[1] shape: {V[1].shape}")  # V[1] shape: torch.Size([1200, 20, 1000])
+        # print(f"shape of the init layer is {self.init_layer(V).shape}")
         if fpi:
             # to fix point iteration (aka mean-field iteration)
             fea = self.init_layer(V).reshape(subset_mat.shape[0], 1, -1, self.dim_feature)
