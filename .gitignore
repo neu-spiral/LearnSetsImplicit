@@ -41,3 +41,4 @@ Thumbs.db
 */celeba/*
 */dataset
 */SetFunction
+*/__pycache__/
