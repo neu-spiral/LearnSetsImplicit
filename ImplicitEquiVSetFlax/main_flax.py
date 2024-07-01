@@ -38,7 +38,8 @@ import utils.config as config_file
 
 # jax.config.update("jax_debug_nans", True)  # stops execution when nan occurs
 jax.config.update("jax_enable_x64", True)  # solves the nan value issue when calculating q, hence loss
-
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"  # add this
+os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
 
 def get_data(params):
     data_name = params.data_name
@@ -194,7 +195,7 @@ if __name__ == "__main__":
     # print(next(iter(train_loader)))
     trainer = EquiVSetTrainer(params=params,
                               dim_feature=256,
-                              optimizer_hparams={'lr': 0.0001},
+                              optimizer_hparams={'lr': params.lr},
                               logger_params={'base_log_dir': CHECKPOINT_PATH},
                               exmp_input=next(iter(train_loader)),
                               check_val_every_n_epoch=1,
@@ -221,6 +222,7 @@ if __name__ == "__main__":
         'data_name': params.data_name,
         'amazon_cat': params.amazon_cat,
         'mode': params.mode,
+        'lr': params.lr,
         'best_train_loss': metrics["best_train/loss"],
         'best_train_jaccard': metrics["best_train/jaccard"],
         'best_val_jaccard': metrics["best_val/jaccard"],

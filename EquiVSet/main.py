@@ -47,6 +47,12 @@ if __name__ == "__main__":
         end_time = time.time()
         elapsed_time = end_time - start_time
 
+        # Convert dictionary to a list of tuples and insert
+        items = list(metrics_dict.items())
+        items.insert(3, ("lr", hparams.lr))
+        metrics_dict = dict(items)
+
+        metrics_dict["batch_size"] = hparams.batch_size
         metrics_dict["time"] = elapsed_time
         metrics_dict["memory_used_MB"] = memory_used / (1024 ** 2)
         print(metrics_dict)
