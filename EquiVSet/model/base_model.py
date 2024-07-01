@@ -49,7 +49,7 @@ class Base_Model(nn.Module):
         raise NotImplementedError
 
     def run_training_sessions(self):
-        logger = Logger(self.hparams.save_path + '.log', on=True)
+        logger = Logger(self.hparams.save_path + '.log', on=False)
         val_perfs = []
         test_perfs = []
         best_val_perf = float('-inf')
@@ -318,7 +318,7 @@ class Base_Model(nn.Module):
                             help='num dataloader workers [%(default)d]')
         parser.add_argument('--cuda', action='store_true',
                             help='use CUDA?')
-        parser.add_argument('--seed', type=int, default=50971,
+        parser.add_argument('--seed', type=int, default=1,
                             help='random seed [%(default)d]')
 
         return parser
