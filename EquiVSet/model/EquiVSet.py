@@ -24,11 +24,17 @@ class EquiVSet(Base_Model):
 
     def inference(self, V, bs):
         if self.hparams.mode == 'diffMF':
-            bs, vs = V.shape[:2]
-            if self.hparams.data_name == 'celeba' or self.hparams.data_name == 'pdbbind':
-                bs = int(bs / 8)
+            if self.hparams.data_name == 'bindingdb':
+                bs = self.hparams.batch_size
                 vs = self.hparams.v_size
-            q = .5 * torch.ones(bs, vs).to(V.device)
+                device = torch.device('cuda' if self.hparams.cuda else 'cpu')
+                q = .5 * torch.ones(bs, vs).to(device)  # ψ_0 <-- 0.5 * vector(1)
+            else:
+                bs, vs = V.shape[:2]
+                if self.hparams.data_name == 'celeba' or self.hparams.data_name == 'pdbbind':
+                    bs = int(bs / 8)
+                    vs = self.hparams.v_size
+                q = .5 * torch.ones(bs, vs).to(V.device)
         else:
             # mode == 'ind' or 'copula'
             q = self.rec_net.get_vardist(V, bs)

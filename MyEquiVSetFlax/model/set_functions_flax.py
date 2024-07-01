@@ -213,20 +213,18 @@ class SetFunction(nn.Module):  # can be renamed as DiffMF
     params: dict
 
     def cross_entropy(self, q, S, neg_S):  # Eq. (5) in the paper
-        # jax.debug.print("S is {S}\n", S=S)
-        # jax.debug.print("shape of S is {S.shape}\n", S=S)
-        # jax.debug.print("q is {q}\n", q=q)
-        # jax.debug.print("shape of q is {q.shape}\n", q=q)
-        # jax.debug.print("neg_S is {neg_S}\n", neg_S=neg_S)
-        # jax.debug.print("shape of neg_S is {neg_S.shape}\n", neg_S=neg_S)
         loss = - jnp.sum((S * jnp.log(q + 1e-12) + (1 - S) * jnp.log(1 - q + 1e-12)) * neg_S, axis=-1)
         return loss.mean()
 
     @nn.compact
     def __call__(self, V, S, neg_S, **kwargs):
         """"returns cross-entropy loss."""
-        bs, vs = V.shape[:2]
-        q_init = .5 * jnp.ones((bs, vs))  # ψ_0 <-- 0.5 * vector(1)
+        if self.params.mode == 'diffMF':
+            bs, vs = V.shape[:2]
+            q_init = .5 * jnp.ones((bs, vs))  # ψ_0 <-- 0.5 * vector(1)
+        else:
+            q_init = rec_net.get_vardist(V, S.shape[0])
+            
         fixed_point = FixedPointUpdate(params=self.params)
         mfvi = MFVI(params=self.params, fixed_point=fixed_point)
         q = mfvi(q_init, V)

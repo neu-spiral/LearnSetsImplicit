@@ -94,7 +94,7 @@ class SetFunction(nn.Module):  # nn.Module is the base class for all NN modules.
                 if self.params.data_name == 'celeba':
                     bs = int(bs / 8)
                     vs = self.params.v_size
-                    q = .5 * torch.ones(bs, vs).to(V.device)  # ψ_0 <-- 0.5 * vector(1)
+                q = .5 * torch.ones(bs, vs).to(V.device)  # ψ_0 <-- 0.5 * vector(1)
 
         else:
             # mode == 'ind' or 'copula'
