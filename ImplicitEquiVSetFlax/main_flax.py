@@ -141,6 +141,8 @@ def parse_arguments():
                         help='Size of history in Anderson updates [%(default)d]')
     parser.add_argument('--M', type=int, default=2,
                         help='Scaling factor [%(default)d]')
+    parser.add_argument('--norm', type=str, default='nuc', choices=['fro', 'nuc'],
+                        help='Norm choice to be used in scaling [%(default)d]')
     args = parser.parse_args()
     return args
 

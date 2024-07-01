@@ -84,7 +84,7 @@ class MFVI(nn.Module):
         fea_0 = ff(fea_0).squeeze(-1)
 
         grad = (fea_1 - fea_0).mean(1)
-        norm = jnp.linalg.norm(grad)
+        norm = jnp.linalg.norm(grad, ord=self.params.norm)
         # grad = jnp.where(l2_norm > 2/self.params.v_size, (2 / (self.params.v_size * l2_norm)) * grad, grad)
 
         q = jax.nn.sigmoid((2 / (self.params.v_size * norm)) * grad)
