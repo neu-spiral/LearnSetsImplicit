@@ -11,6 +11,8 @@ import numpy as np
 from functools import partial
 from jaxopt import AndersonAcceleration, FixedPointIteration
 from jaxopt.linear_solve import solve_gmres, solve_normal_cg
+from model.acnn import ACNN
+from utils.config import ACNN_CONFIG
 from model.celebaCNN import CelebaCNN
 from model.deepDTA import DeepDTA_Encoder
 from typing import Callable
@@ -54,6 +56,7 @@ class MFVI(nn.Module):
         matrix_1 = matrix_0 + mask
         return matrix_1, matrix_0, sample_matrix  # F([x]_+i), F([x]_- i)
 
+    # @property
     def define_init_layer(self):
         """
         Returns the initial layer custom to different setups.
@@ -64,6 +67,12 @@ class MFVI(nn.Module):
             return CelebaCNN()
         elif data_name == 'bindingdb':
             return DeepDTA_Encoder()
+        # elif data_name == 'pdbbind':
+        #     return ACNN(hidden_sizes=ACNN_CONFIG['hidden_sizes'],
+        #                 weight_init_stddevs=ACNN_CONFIG['weight_init_stddevs'],
+        #                 dropouts=ACNN_CONFIG['dropouts'],
+        #                 features_to_use=ACNN_CONFIG['atomic_numbers_considered'],
+        #                 radial=ACNN_CONFIG['radial'])
         return nn.Dense(features=self.dim_feature)
 
     @nn.compact
@@ -85,9 +94,14 @@ class MFVI(nn.Module):
 
         grad = (fea_1 - fea_0).mean(1)
         norm = jnp.linalg.norm(grad, ord=self.params.norm)
+        # jax.debug.print("norm: {}", norm)
+        # if norm > self.params.M:
+        #     self.params.M = norm
+        # self.params.M = jnp.where(norm > self.params.M, norm, self.params.M)
         # grad = jnp.where(l2_norm > 2/self.params.v_size, (2 / (self.params.v_size * l2_norm)) * grad, grad)
 
         q = jax.nn.sigmoid((2 / (self.params.v_size * norm)) * grad)
+        # q = jax.nn.sigmoid(grad)
         return q
 
 
@@ -136,7 +150,7 @@ class SetFunction(nn.Module):
 
     def __call__(self, V, S, neg_S, rec_net=None, **kwargs):
         """"returns cross-entropy loss."""
-        if self.params.mode == 'diffMF':
+        if self.params.mode == 'implicit':
             # print(V)
             if self.params.data_name == 'bindingdb':
                 bs = self.params.batch_size

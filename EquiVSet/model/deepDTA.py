@@ -68,11 +68,11 @@ class CNN(nn.Sequential):
 
     def _forward_features(self, x):
         for l in self.conv:
-            print(f"shape of l(v) is : {l(x).shape}")
+            # print(f"shape of l(v) is : {l(x).shape}")
             x = F.relu(l(x))
-        print(f"shape of v is before max pool: {x.shape}")
+        # print(f"shape of v is before max pool: {x.shape}")
         x = F.adaptive_max_pool1d(x, output_size=1)
-        print(f"shape of v is after max pool: {x.shape}")
+        # print(f"shape of v is after max pool: {x.shape}")
         return x
 
     def forward(self, v):
@@ -100,10 +100,12 @@ class DeepDTA_Encoder(nn.Sequential):
         v_D = self.model_drug(v_D)  # shape of v_D is torch.Size([1200, 256])
         v_P = self.model_protein(v_P)  # shape of v_P is torch.Size([1200, 256])
 
-        print(f"shape of v_D is {v_D.shape}")
-        print(f"shape of v_P is {v_P.shape}")
+        # print(f"shape of v_D is {v_D.shape}")
+        # print(f"shape of v_P is {v_P.shape}")
 
         # concatenate and output feature
         v_f = torch.cat((v_D, v_P), 1)
+        # print(f"shape of v_f after concat is {v_f.shape}")
         v_f = self.predictor(v_f)
+        # print(f"shape of v_f after predictor is {v_f.shape}")
         return v_f

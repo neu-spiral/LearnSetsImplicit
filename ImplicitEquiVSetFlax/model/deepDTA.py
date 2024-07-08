@@ -104,5 +104,7 @@ class DeepDTA_Encoder(nn.Module):
 
         # concatenate and output feature
         v_f = jnp.concatenate((v_D, v_P), axis=1)
+        # print(f"shape of v_f after concat is {v_f.shape}")
         v_f = self.predictor(v_f)
+        # print(f"shape of v_f after predictor is {v_f.shape}")
         return v_f
