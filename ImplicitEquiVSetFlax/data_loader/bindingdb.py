@@ -52,7 +52,7 @@ class SetBindingDB(object):
         V_size, S_size = self.params.v_size, self.params.s_size
         self.dataset = load_bindingdb(self.params)
 
-        data_root = './root/dataset/bindingdb'
+        data_root = 'dataset/bindingdb'
         data_path = os.path.join(data_root, 'bindingdb_set_data.pkl')
         if os.path.exists(data_path):
             print(f'load data from {data_path}')
@@ -72,10 +72,11 @@ class SetBindingDB(object):
                 os.makedirs(data_root)
             pickle.dump((trainData, valData, testData), open(data_path, "wb"))
 
-    def get_loaders(self, batch_size, num_workers, shuffle_train=False, get_test=True):
-        train_dataset = SetDataset(self.dataset, self.V_train, self.S_train, self.params, is_train=True)
-        val_dataset = SetDataset(self.dataset, self.V_val, self.S_val, self.params)
-        test_dataset = SetDataset(self.dataset, self.V_test, self.S_test, self.params)
+    def get_loaders(self, batch_size, num_workers, shuffle_train=False, get_test=True, transform=None):
+        train_dataset = SetDataset(self.dataset, self.V_train, self.S_train, self.params, is_train=True,
+                                   transform=transform)
+        val_dataset = SetDataset(self.dataset, self.V_val, self.S_val, self.params, transform=transform)
+        test_dataset = SetDataset(self.dataset, self.V_test, self.S_test, self.params, transform=transform)
 
         train_loader = DataLoader(dataset=train_dataset, batch_size=batch_size,
                                     collate_fn=collate_train, pin_memory=True, shuffle=shuffle_train, num_workers=num_workers)
@@ -84,6 +85,36 @@ class SetBindingDB(object):
         test_loader = DataLoader(dataset=test_dataset, batch_size=batch_size,
                                     collate_fn=collate_val_and_test, pin_memory=True, shuffle=False, num_workers=num_workers) if get_test else None
         
+        return train_loader, val_loader, test_loader
+
+    def get_kfold_loaders(self, batch_size, num_workers, fold, shuffle_train=False, get_test=True, transform=None):
+        # Combine train and validation sets for k-fold split
+        combined_V = np.concatenate((self.V_train, self.V_val), axis=0)
+        combined_S = np.concatenate((self.S_train, self.S_val), axis=0)
+
+        kf = KFold(n_splits=5, shuffle=True, random_state=1)
+        splits = list(kf.split(combined_V))
+
+        # Get the indices for the specified fold
+        train_indices, val_indices = splits[fold-1]
+
+        # Create train and validation datasets for the current fold
+        train_dataset = SetDataset(combined_V[train_indices], combined_S[train_indices], self.params, is_train=True,
+                                   transform=transform)
+        val_dataset = SetDataset(combined_V[val_indices], combined_S[val_indices], self.params, is_train=True,
+                                 transform=transform)
+        test_dataset = SetDataset(self.V_test, self.S_test, self.params, is_train=True, transform=transform)
+
+        # Create data loaders
+        train_loader = DataLoader(dataset=train_dataset, batch_size=batch_size,
+                                  shuffle=shuffle_train, num_workers=num_workers,
+                                  collate_fn=numpy_collate)
+        val_loader = DataLoader(dataset=val_dataset, batch_size=batch_size,
+                                shuffle=False, num_workers=num_workers,
+                                collate_fn=numpy_collate)
+        test_loader = DataLoader(dataset=test_dataset, batch_size=batch_size,
+                                 shuffle=False, num_workers=num_workers,
+                                 collate_fn=numpy_collate) if get_test else None
         return train_loader, val_loader, test_loader
 
 def collate_train(data):
@@ -95,10 +126,17 @@ def collate_train(data):
     b_D = Tokenizer.tokenizer(b_D, 'drug')
     b_P = Tokenizer.tokenizer(b_P, 'protein')
 
-    b_D = torch.cat(b_D, dim=0)
-    b_P = torch.cat(b_P, dim=0)
-    S = torch.cat(S, dim=0).reshape(bs, -1)
-    neg_S = torch.cat(neg_S, dim=0).reshape(bs, -1)
+    b_D = np.concatenate(b_D, axis=0)  # shape: (1200, 41, 100)
+    b_P = np.concatenate(b_P, axis=0)  # shape: (1200, 20, 1000)
+    # print(f"V_drug: {type(V_drug)}")
+    # print(f"V_target: {type(V_target)}")
+    # print(f"S: {type(S)}")
+    # print(f"S type is {type(S)}")
+    S = np.concatenate(S, axis=0).reshape(bs, -1)  # shape: (4, 300)
+    neg_S = np.concatenate(neg_S, axis=0).reshape(bs, -1)
+    # print(f"b_D: {b_D.shape}")
+    # print(f"b_P: {b_P.shape}")
+    # print(f"S: {S.shape}")
     return (b_D, b_P), S, neg_S
 
 def collate_val_and_test(data):
@@ -110,18 +148,19 @@ def collate_val_and_test(data):
     b_D = Tokenizer.tokenizer(b_D, 'drug')
     b_P = Tokenizer.tokenizer(b_P, 'protein')
 
-    b_D = torch.cat(b_D, dim=0)
-    b_P = torch.cat(b_P, dim=0)
-    S = torch.cat(S, dim=0).reshape(bs, -1)
+    b_D = np.concatenate(b_D, axis=0)
+    b_P = np.concatenate(b_P, axis=0)
+    S = np.concatenate(S, axis=0).reshape(bs, -1)
     return (b_D, b_P), S
 
 class SetDataset(Dataset):
-    def __init__(self, dataset, V_idxs, S_idxs, params, is_train=False):
+    def __init__(self, dataset, V_idxs, S_idxs, params, is_train=False, transform=None):
         self.drugs, self.targets = dataset['Drug'], dataset['Target']
         self.V_idxs, self.S_idxs = V_idxs, S_idxs
         self.is_train = is_train
         self.neg_num = params.neg_num
         self.v_size = params.v_size
+        self.transform = transform
 
     def __getitem__(self, index):
         V_idxs, S = np.array(self.V_idxs[index]), np.array(self.S_idxs[index])
@@ -136,15 +175,22 @@ class SetDataset(Dataset):
             neg_S_mask = torch.zeros([self.v_size])
             neg_S_mask[S] = 1
             neg_S_mask[neg_S] = 1
+            if self.transform:
+                V_drug, V_target, S_mask, neg_S_mask = self.transform(V_drug), self.transform(V_target), \
+                                                       self.transform(S_mask), self.transform(neg_S_mask)
             return V_drug, V_target, S_mask, neg_S_mask
-
+        if self.transform:
+            V_drug, V_target, S_mask = self.transform(V_drug), self.transform(V_target), self.transform(S_mask)
+        # print(f"V_drug: {V_drug}")
+        # print(f"V_target: {V_target}")
+        # print(f"S_mask: {S_mask}")
         return V_drug, V_target, S_mask
 
     def __len__(self):
         return len(self.V_idxs)
 
 def load_bindingdb(params):
-    data = DTI(name = 'BindingDB_Kd', path='./root/dataset/bindingdb')
+    data = DTI(name = 'BindingDB_Kd', path='dataset/bindingdb')
     data.harmonize_affinities(mode = 'mean')
     return data.get_data()
 
