@@ -378,7 +378,7 @@ class TrainerModule(nn.Module):  # why did they define it without nn.Module?
             print(f'Epoch {epoch_idx}|Test jc: {test_metrics["test/jaccard"]:.2f}\n')
             # Close logger
         self.logger.finalize('success')
-        plot_dual_metric_dicts(train_loss_list, train_metric_dict, val_metric_dict, self.model_hparams['params'].data_name)
+        # plot_dual_metric_dicts(train_loss_list, train_metric_dict, val_metric_dict, self.model_hparams['params'].data_name)
         return best_eval_metrics
 
     def train_epoch(self,

@@ -78,13 +78,21 @@ class MFVI(nn.Module):
         fea_0 = init_layer(V).reshape(subset_not_i.shape[0], 1, -1, self.dim_feature)
         fea_0 = subset_not_i @ fea_0
         fea_0 = ff(fea_0).squeeze(-1)
+        f_max = jnp.absolute(jnp.maximum(jnp.max(fea_0), jnp.max(fea_1)))
+
+        # self.params.M = jnp.where(f_max > self.params.M, f_max, self.params.M)
 
         grad = (fea_1 - fea_0).mean(1)
-        l2_norm = jnp.linalg.norm(grad)
+        # l2_norm = jnp.linalg.norm(grad)
+        nuc_norm = jnp.linalg.norm(grad, ord = 'nuc')
+
         # if l2_norm > 2/self.params.v_size:
         #     grad *= 2 / (self.params.v_size * l2_norm)
-        grad = jnp.where(l2_norm > 2/self.params.v_size, (2 / (self.params.v_size * l2_norm)) * grad, grad)
-
+        # grad = jnp.where(l2_norm > 2/self.params.v_size, (2 / (self.params.v_size * l2_norm)) * grad, grad)
+        # jax.debug.print("l2_norm is {l2_norm}", l2_norm=l2_norm)
+        # jax.debug.print("f_max is {f_max}", f_max=f_max)
+        # grad *= 2 / (self.params.v_size * l2_norm)
+        grad = 2*grad/(self.params.v_size*nuc_norm)
         q = jax.nn.sigmoid(grad)
         return q
 

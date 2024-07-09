@@ -85,8 +85,8 @@ class CelebA(Data):
 
     def get_loaders(self, batch_size, num_workers, shuffle_train=False, get_test=True):
         train_dataset = SetDataset(self.V_train, self.S_train, self.params, is_train=True)
-        val_dataset = SetDataset(self.V_val, self.S_val, self.params)
-        test_dataset = SetDataset(self.V_test, self.S_test, self.params)
+        val_dataset = SetDataset(self.V_val, self.S_val, self.params, is_train=True)
+        test_dataset = SetDataset(self.V_test, self.S_test, self.params, is_train=True)
 
         train_loader = DataLoader(dataset=train_dataset, batch_size=batch_size,
                                     collate_fn=collate_train, shuffle=shuffle_train, num_workers=num_workers)

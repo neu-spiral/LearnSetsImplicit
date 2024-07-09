@@ -158,7 +158,7 @@ if __name__ == "__main__":
 
     trainer = EquiVSetTrainer(params=params,
                               dim_feature=256,
-                              optimizer_hparams={'lr': 0.0001},
+                              optimizer_hparams={'lr': params.lr},
                               logger_params={'base_log_dir': CHECKPOINT_PATH},
                               exmp_input=next(iter(train_loader)),
                               check_val_every_n_epoch=1,
@@ -168,7 +168,7 @@ if __name__ == "__main__":
     metrics = trainer.train_model(train_loader,
                                   val_loader,
                                   test_loader=test_loader,
-                                  num_epochs=10)
+                                  num_epochs=params.epochs)
 
     print(f'Training loss: {metrics["train/loss"]}')
     # print(f'Training Jaccard index: {metrics["train/jaccard"]}')

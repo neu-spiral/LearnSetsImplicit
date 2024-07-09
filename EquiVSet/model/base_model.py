@@ -5,11 +5,14 @@ import argparse
 import datetime
 import numpy as np
 import torch.nn as nn
+from torch.utils.data import DataLoader, Subset, ConcatDataset
+from torchvision import datasets, transforms
 from copy import deepcopy
 from datetime import timedelta
 from collections import OrderedDict
 from collections import defaultdict
 from timeit import default_timer as timer
+from sklearn.model_selection import KFold
 
 from utils.logger import Logger
 from utils.evaluation import compute_metrics
@@ -49,7 +52,7 @@ class Base_Model(nn.Module):
         raise NotImplementedError
 
     def run_training_sessions(self):
-        logger = Logger(self.hparams.save_path + '.log', on=True)
+        logger = Logger(self.hparams.save_path + '.log', on=False)
         val_perfs = []
         test_perfs = []
         best_val_perf = float('-inf')
@@ -112,6 +115,21 @@ class Base_Model(nn.Module):
         train_loader, val_loader, test_loader = self.data.get_loaders(
             self.hparams.batch_size, self.hparams.num_workers,
             shuffle_train=True, get_test=True)
+        combined_dataset = ConcatDataset([train_loader.dataset, val_loader.dataset])
+        indices = list(range(len(combined_dataset)))
+
+        # KFold cross-validator with a fixed seed for reproducibility
+        kfold = KFold(n_splits=5, shuffle=True, random_state=self.hparams.seed)
+        for fold, (train_indices, val_indices) in enumerate(kfold.split(indices)):
+            if fold == self.hparams.fold:
+                train_subset = Subset(combined_dataset, train_indices)
+                val_subset = Subset(combined_dataset, val_indices)
+                train_loader = DataLoader(train_subset, batch_size=self.hparams.batch_size,
+                                          num_workers=self.hparams.num_workers, shuffle=False)
+                val_loader = DataLoader(val_subset, batch_size=self.hparams.batch_size,
+                                        num_workers=self.hparams.num_workers, shuffle=False)
+
+
         best_val_perf = float('-inf')
         best_train_loss = float('-inf')
         best_state_dict = None
@@ -198,7 +216,7 @@ class Base_Model(nn.Module):
             logger.log('Exiting from training early')
 
         metrics_dict = {
-            'seed': self.hparams.seed,
+            'fold': self.hparams.fold,
             'data_name': self.hparams.data_name,
             'amazon_cat': self.hparams.amazon_cat,
             'mode': self.hparams.mode,
@@ -318,7 +336,8 @@ class Base_Model(nn.Module):
                             help='num dataloader workers [%(default)d]')
         parser.add_argument('--cuda', action='store_true',
                             help='use CUDA?')
-        parser.add_argument('--seed', type=int, default=50971,
+        parser.add_argument('--seed', type=int, default=1,
                             help='random seed [%(default)d]')
-
+        parser.add_argument('--fold', type=int, default=1,
+                            help='5-fold from 1 to 5 [%(default)d]')
         return parser
