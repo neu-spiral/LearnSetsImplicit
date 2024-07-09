@@ -10,7 +10,8 @@ import numpy as np
 from copy import copy
 from glob import glob
 from collections import defaultdict
-
+import psutil
+import pandas as pd
 # JAX/Flax
 # If you run this code on Colab, remember to install flax and optax
 # !pip install --quiet --upgrade flax optax
@@ -37,7 +38,8 @@ import utils.config as config_file
 
 # jax.config.update("jax_debug_nans", True)  # stops execution when nan occurs
 jax.config.update("jax_enable_x64", True)  # solves the nan value issue when calculating q, hence loss
-
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"  # add this
+os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
 
 def get_data(params):
     data_name = params.data_name
@@ -142,6 +144,11 @@ if __name__ == "__main__":
     train_loader, val_loader, test_loader = data.get_loaders(batch_size, num_workers, transform=tensor_to_numpy)
     # print(next(iter(train_loader)))
 
+    start_time = time.time()
+    # Track memory usage before training
+    process = psutil.Process(os.getpid())
+    memory_before = process.memory_info().rss
+
     trainer = EquiVSetTrainer(params=params,
                               dim_feature=256,
                               optimizer_hparams={'lr': 0.0001},
@@ -156,9 +163,49 @@ if __name__ == "__main__":
                                   test_loader=test_loader,
                                   num_epochs=10)
 
-    print(f'Training loss: {metrics["train/loss"]}')
-    # print(f'Training Jaccard index: {metrics["train/jaccard"]}')
-    # print(f'Validation loss: {metrics["val/loss"]}')
-    print(f'Validation Jaccard index: {metrics["val/jaccard"]}')
-    # print(f'Test loss: {metrics["test/loss"]}')
-    print(f'Test Jaccard index: {metrics["test/jaccard"]}')
+    # Track memory usage after training
+    memory_after = process.memory_info().rss
+    memory_used = memory_after - memory_before
+
+    # Record end time
+    end_time = time.time()
+    elapsed_time = end_time - start_time
+
+    # Create a dictionary of metrics
+    metrics_dict = {
+        'data_name': params.data_name,
+        'mode': params.mode,
+        'train_loss': metrics["train/loss"],
+        'train_jaccard': metrics["train/jaccard"],
+        'val_jaccard': metrics["val/jaccard"],
+        'test_jaccard': metrics["test/jaccard"],
+        'time_elapsed': elapsed_time,
+        'memory_used_MB': memory_used / (1024 ** 2)
+    }
+    # Convert dictionary to DataFrame
+    df_metrics = pd.DataFrame([metrics_dict])
+
+    # Filepath for the output CSV
+    output_filepath = f"../history/metrics_{params.data_name}.csv"
+
+    # Append metrics to CSV
+    if os.path.exists(output_filepath):
+        # If the file exists, load the existing DataFrame and concatenate
+        output = pd.read_csv(output_filepath)
+        output = pd.concat([output, df_metrics], ignore_index=True)
+    else:
+        # If the file does not exist, create a new DataFrame
+        output = df_metrics
+
+    # Save the updated DataFrame to CSV
+    output.to_csv(output_filepath, index=False)
+
+    # Print the head of the DataFrame
+    print(output.head())
+
+    # print(f'Training loss: {metrics["train/loss"]}')
+    # # print(f'Training Jaccard index: {metrics["train/jaccard"]}')
+    # # print(f'Validation loss: {metrics["val/loss"]}')
+    # print(f'Validation Jaccard index: {metrics["val/jaccard"]}')
+    # # print(f'Test loss: {metrics["test/loss"]}')
+    # print(f'Test Jaccard index: {metrics["test/jaccard"]}')

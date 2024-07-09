@@ -96,6 +96,8 @@ def parse_arguments():
                         help='num dataloader workers [%(default)d]')
     parser.add_argument('--seed', type=int, default=0,
                         help='random seed [%(default)d]')
+    parser.add_argument('--fold', type=int, default=1,
+                        help='5-fold from 1 to 5 [%(default)d]')
     parser.add_argument('--mode', type=str, default='implicit',
                         choices=['implicit', 'diffMF', 'ind', 'copula'],
                         help='name of the variant model [%(default)s]')
@@ -144,6 +146,8 @@ def parse_arguments():
                         help='Scaling factor [%(default)d]')
     parser.add_argument('--norm', type=str, default='nuc', choices=['fro', 'nuc'],
                         help='Norm choice to be used in scaling [%(default)d]')
+    parser.add_argument('--lipschitz', type=float, default=500,
+                        help='Lipschitz of the NN')
     args = parser.parse_args()
     return args
 
@@ -180,13 +184,8 @@ if __name__ == "__main__":
             # print(type(x))
             return x
 
-    if params.data_name != 'bindingdb':
-        train_loader, val_loader, test_loader = data.get_loaders(batch_size, num_workers, transform=tensor_to_numpy,
-                                                                 shuffle_train=True, get_test=True)
-    else:
-        train_loader, val_loader, test_loader = data.get_loaders(batch_size, num_workers, transform=tensor_to_numpy,
-                                                                 shuffle_train=True, get_test=True)
-    # print(next(iter(train_loader))[0].shape)
+    # train_loader, val_loader, test_loader = data.get_loaders(batch_size, num_workers, transform=tensor_to_numpy)
+    train_loader, val_loader, test_loader = data.get_kfold_loaders(batch_size, num_workers, fold=params.fold)
 
     start_time = time.time()
     # Track memory usage before training
@@ -218,7 +217,7 @@ if __name__ == "__main__":
 
     # Create a dictionary of metrics
     metrics_dict = {
-        'seed': params.seed,
+        'fold': params.fold,
         'data_name': params.data_name,
         'amazon_cat': params.amazon_cat,
         'mode': params.mode,

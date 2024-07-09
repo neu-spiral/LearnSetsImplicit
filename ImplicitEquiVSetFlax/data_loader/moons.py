@@ -1,7 +1,8 @@
 import torch
 import numpy as np
 from sklearn import datasets
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Subset, Dataset, DataLoader, ConcatDataset
+from sklearn.model_selection import KFold
 
 
 def numpy_collate(batch):
@@ -49,6 +50,36 @@ class TwoMoons(Data):
         # revert is_train to False for inference
         test_dataset = SetDataset(self.V_test, self.S_test, self.params, is_train=True, transform=transform)
 
+        train_loader = DataLoader(dataset=train_dataset, batch_size=batch_size,
+                                  shuffle=shuffle_train, num_workers=num_workers,
+                                  collate_fn=numpy_collate)
+        val_loader = DataLoader(dataset=val_dataset, batch_size=batch_size,
+                                shuffle=False, num_workers=num_workers,
+                                collate_fn=numpy_collate)
+        test_loader = DataLoader(dataset=test_dataset, batch_size=batch_size,
+                                 shuffle=False, num_workers=num_workers,
+                                 collate_fn=numpy_collate) if get_test else None
+        return train_loader, val_loader, test_loader
+
+    def get_kfold_loaders(self, batch_size, num_workers, fold, shuffle_train=False, get_test=True, transform=None):
+        # Combine train and validation sets for k-fold split
+        combined_V = np.concatenate((self.V_train, self.V_val), axis=0)
+        combined_S = np.concatenate((self.S_train, self.S_val), axis=0)
+
+        kf = KFold(n_splits=5, shuffle=True, random_state=1)
+        splits = list(kf.split(combined_V))
+
+        # Get the indices for the specified fold
+        train_indices, val_indices = splits[fold]
+
+        # Create train and validation datasets for the current fold
+        train_dataset = SetDataset(combined_V[train_indices], combined_S[train_indices], self.params, is_train=True,
+                                   transform=transform)
+        val_dataset = SetDataset(combined_V[val_indices], combined_S[val_indices], self.params, is_train=True,
+                                 transform=transform)
+        test_dataset = SetDataset(self.V_test, self.S_test, self.params, is_train=True, transform=transform)
+
+        # Create data loaders
         train_loader = DataLoader(dataset=train_dataset, batch_size=batch_size,
                                   shuffle=shuffle_train, num_workers=num_workers,
                                   collate_fn=numpy_collate)

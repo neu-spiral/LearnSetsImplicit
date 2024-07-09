@@ -37,8 +37,14 @@
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# custom #
+######################
 */checkpoints
 */celeba/*
 */dataset
 */SetFunction
 */__pycache__/
+history/
+EquiVSet/root
+ImplicitEquiVSetFlax/root

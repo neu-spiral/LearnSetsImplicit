@@ -91,6 +91,9 @@ class MFVI(nn.Module):
         fea_0 = init_layer(V).reshape(subset_not_i.shape[0], 1, -1, self.dim_feature)
         fea_0 = subset_not_i @ fea_0
         fea_0 = ff(fea_0).squeeze(-1)
+        f_max = jnp.absolute(jnp.maximum(jnp.max(fea_0), jnp.max(fea_1)))
+
+        # self.params.M = jnp.where(f_max > self.params.M, f_max, self.params.M)
 
         grad = (fea_1 - fea_0).mean(1)
         norm = jnp.linalg.norm(grad, ord=self.params.norm)

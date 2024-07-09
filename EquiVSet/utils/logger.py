@@ -6,7 +6,7 @@ import time
 
 class Logger(object):
 
-    def __init__(self, log_path, on=True):
+    def __init__(self, log_path, on=False):
         self.log_path = log_path
         self.on = on
         # self.on = False

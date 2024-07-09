@@ -112,15 +112,15 @@ class SetFunction(nn.Module):  # nn.Module is the base class for all NN modules.
         return loss
 
     def F_S(self, V, subset_mat, fpi=False):
-        print(self.init_layer(V).shape)
-        print(V.shape)
+        # print(self.init_layer(V).shape)
+        # print(V.shape)
         if fpi:
             # to fix point iteration (aka mean-field iteration)
             fea = self.init_layer(V).reshape(subset_mat.shape[0], 1, -1, self.dim_feature)
         else:
             # to encode variational dist
             fea = self.init_layer(V).reshape(subset_mat.shape[0], -1, self.dim_feature)
-        print(subset_mat.shape, fea.shape)
+        # print(subset_mat.shape, fea.shape)
         fea = subset_mat @ fea
         fea = self.ff(fea)  # goes thru FF block
         # self.ff.apply(params, fea)
