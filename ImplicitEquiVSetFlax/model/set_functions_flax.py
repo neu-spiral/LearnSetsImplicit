@@ -132,6 +132,8 @@ class SetFunction(nn.Module):
         """
         if self.params.bwd_solver == 'normal_cg':
             implicit_solver = partial(solve_normal_cg, tol=self.params.bwd_tol, maxiter=self.params.bwd_maxiter)
+        elif self.params.bwd_solver == "gmres":
+            implicit_solver = partial(solve_gmres, tol=self.params.bwd_tol, maxiter=self.params.bwd_maxiter)
         if self.params.fwd_solver == 'fpi':
             fixed_point_solver = partial(FixedPointIteration,
                                          maxiter=self.params.fwd_maxiter,
