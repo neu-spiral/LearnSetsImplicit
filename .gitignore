@@ -37,7 +37,13 @@
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# custom #
+######################
 */checkpoints
 */celeba/*
 */dataset
 */SetFunction
+history/
+EquiVSet/root
+ImplicitEquiVSetFlax/root

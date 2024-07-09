@@ -4,14 +4,18 @@
 dir="EquiVSet"
 
 # Possible values for data_name and mode
-data_names=("gaussian" "celeba") #"amazon" "moons" 
-modes=("diffMF" "ind" "copula")
+data_names=("gaussian"  "amazon" "celeba") #"moons"
+modes=("diffMF"  "ind" "copula")
 
 # Possible values for amazon_cat
 amazon_cats=("toys" "furniture" "gear" "carseats" "bath" "health" "diaper" "bedding" "safety" "feeding" "apparel" "media")
 
+# Learning rates
+learning_rates=("0.001" "0.0001" "0.00001") #"0.01"
+
 # Number of repetitions
-repetitions=5
+folds=5
+num_layers=3
 
 # Loop over each data_name
 for data_name in "${data_names[@]}"; do
@@ -20,22 +24,24 @@ for data_name in "${data_names[@]}"; do
     for amazon_cat in "${amazon_cats[@]}"; do
       # Loop over each mode
       for mode in "${modes[@]}"; do
-        for ((i=1; i<=repetitions; i++)); do
-          # Generate a random seed
-          seed=$RANDOM
-          echo "Running $dir/main.py with --data_name=$data_name --amazon_cat=$amazon_cat --mode=$mode --seed=$seed (Run $i)"
-          (cd "$dir" && python main.py equivset --train --cuda --data_name="$data_name" --amazon_cat="$amazon_cat" --mode="$mode" --seed=$seed)
+        for lr in "${learning_rates[@]}"; do
+          for ((i=1; i<=folds; i++)); do
+            fold=$i
+            echo "Running $dir/main.py with --data_name=$data_name --amazon_cat=$amazon_cat --mode=$mode --lr=$lr --fold=$fold (Run $i) --num_layers=$num_layers"
+            (cd "$dir" && CUDA_VISIBLE_DEVICES=1 python main.py equivset --train --cuda --data_name="$data_name" --amazon_cat="$amazon_cat" --mode="$mode" --lr="$lr" --fold=$fold --num_layers=$num_layers)
+          done
         done
       done
     done
   else
     # Loop over each mode
     for mode in "${modes[@]}"; do
-      for ((i=1; i<=repetitions; i++)); do
-        # Generate a random seed
-        seed=$RANDOM
-        echo "Running $dir/main.py with --data_name=$data_name --mode=$mode --seed=$seed (Run $i)"
-        (cd "$dir" && CUDA_VISIBLE_DEVICES=1 python main.py equivset --train --cuda --data_name="$data_name" --mode="$mode" --seed=$seed)
+      for lr in "${learning_rates[@]}"; do
+        for ((i=1; i<=folds; i++)); do
+          fold=$i
+          echo "Running $dir/main.py with --data_name=$data_name --mode=$mode --lr=$lr --fold=$fold (Run $i) --num_layers=$num_layers"
+          (cd "$dir" && CUDA_VISIBLE_DEVICES=1 python main.py equivset --train --cuda --data_name="$data_name" --mode="$mode" --lr="$lr" --fold=$fold --num_layers=$num_layers)
+        done
       done
     done
   fi
