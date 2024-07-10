@@ -12,7 +12,8 @@ def set_value_according_index(tensor, idx, value):
 
 
 def normal_cdf(value, loc, scale):
-    return 0.5 * (1 + torch.erf((value - loc) / (scale * math.sqrt(2))))
+    #  jax.scipy.special.erf
+    return 0.5 * (1 + jax.lax.erf((value - loc) / (scale * math.sqrt(2))))
 
 
 def get_init_function(init_value):

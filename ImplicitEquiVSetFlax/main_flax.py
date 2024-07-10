@@ -142,10 +142,12 @@ def parse_arguments():
                         help='Ridge regularization in Anderson updates [%(default)d]')
     parser.add_argument('--anderson_hist_size', type=int, default=10,
                         help='Size of history in Anderson updates [%(default)d]')
+    parser.add_argument('--M', type=int, default=2,
+                        help='Scaling factor [%(default)d]')
+    parser.add_argument('--norm', type=str, default='nuc', choices=['fro', 'nuc'],
+                        help='Norm choice to be used in scaling [%(default)d]')
     parser.add_argument('--lipschitz', type=float, default=500,
                         help='Lipschitz of the NN')
-    parser.add_argument('--M', type=float, default=2,
-                        help='The upper bound of the NN output')
     args = parser.parse_args()
     return args
 
@@ -174,9 +176,13 @@ if __name__ == "__main__":
 
 
     def tensor_to_numpy(x):
-        x = np.array(x, dtype=np.float32)
-        return x
-
+        if isinstance(x, torch.FloatTensor):
+            # print(x.type())
+            return np.array(x, dtype=float)
+        else:
+            x = np.array(x, dtype=str)
+            # print(type(x))
+            return x
 
     # train_loader, val_loader, test_loader = data.get_loaders(batch_size, num_workers, transform=tensor_to_numpy)
     train_loader, val_loader, test_loader = data.get_kfold_loaders(batch_size, num_workers, fold=params.fold)
@@ -185,7 +191,7 @@ if __name__ == "__main__":
     # Track memory usage before training
     process = psutil.Process(os.getpid())
     memory_before = process.memory_info().rss
-
+    # print(next(iter(train_loader)))
     trainer = EquiVSetTrainer(params=params,
                               dim_feature=256,
                               optimizer_hparams={'lr': params.lr},

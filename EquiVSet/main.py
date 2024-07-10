@@ -9,8 +9,8 @@ import os
 if __name__ == "__main__":
     argparser = EquiVSet.get_model_specific_argparser()
     hparams = argparser.parse_args()
-    if hparams.mode == 'diffMF':
-        hparams.RNN_steps = 5
+    # if hparams.mode == 'diffMF':
+    #     hparams.RNN_steps = 5
     data_name = hparams.data_name
     # update the arguments dictionary custom to chosen input dataset
     if data_name == 'moons':

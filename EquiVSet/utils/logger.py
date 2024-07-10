@@ -2,6 +2,7 @@ import math
 import os
 import statistics as stat
 import sys
+import time
 
 class Logger(object):
 
@@ -12,7 +13,7 @@ class Logger(object):
 
         if self.on:
             while os.path.isfile(self.log_path):
-                self.log_path += '+'
+                self.log_path += time.strftime("%Y%m%d-%H%M%S")
     
     def log(self, string, newline=True):
         if self.on:
