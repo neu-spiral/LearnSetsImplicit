@@ -4,10 +4,10 @@
 dir="ImplicitEquiVSetFlax"
 
 # Possible values for data_name
-data_names=("celeba") # "amazon") #"moons" "gaussian" )
+data_names=("amazon") # "celeba") #"moons" "gaussian" )
 
 # Possible values for amazon_cat
-amazon_cats=("apparel" "bedding" "carseats" "diaper" "feeding" "gear" "media" "bath" "health" "toys" "furniture" "safety" )
+amazon_cats=("bedding" "carseats" "diaper" "feeding" "gear" "media" "bath" "health" "toys" "furniture" "safety" ) #"apparel"
 
 # Learning rates
 learning_rates=("0.01" "0.001" "0.0001" "0.00001") #

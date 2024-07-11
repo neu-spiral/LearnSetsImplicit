@@ -185,7 +185,7 @@ if __name__ == "__main__":
             return x
 
     # train_loader, val_loader, test_loader = data.get_loaders(batch_size, num_workers, transform=tensor_to_numpy)
-    train_loader, val_loader, test_loader = data.get_kfold_loaders(batch_size, num_workers, fold=params.fold)
+    train_loader, val_loader, test_loader = data.get_kfold_loaders(batch_size, num_workers, params.fold)
 
 
     start_time = time.time()
