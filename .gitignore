@@ -44,6 +44,7 @@ Thumbs.db
 */celeba/*
 */dataset
 */SetFunction
+*/__pycache__/
 history/
 EquiVSet/root
 ImplicitEquiVSetFlax/root

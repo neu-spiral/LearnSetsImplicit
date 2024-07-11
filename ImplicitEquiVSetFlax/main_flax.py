@@ -146,7 +146,8 @@ def parse_arguments():
                         help='Scaling factor [%(default)d]')
     parser.add_argument('--norm', type=str, default='nuc', choices=['fro', 'nuc'],
                         help='Norm choice to be used in scaling [%(default)d]')
-
+    parser.add_argument('--lipschitz', type=float, default=500,
+                        help='Lipschitz of the NN')
     args = parser.parse_args()
     return args
 
@@ -182,16 +183,6 @@ if __name__ == "__main__":
             x = np.array(x, dtype=str)
             # print(type(x))
             return x
-
-    if params.data_name != 'bindingdb':
-        # train_loader, val_loader, test_loader = data.get_loaders(batch_size, num_workers, transform=tensor_to_numpy,
-        #                                                          shuffle_train=True, get_test=True)
-        train_loader, val_loader, test_loader = data.get_kfold_loaders(batch_size, num_workers, params.fold)
-    else:
-        train_loader, val_loader, test_loader = data.get_loaders(batch_size, num_workers, transform=tensor_to_numpy,
-                                                                 shuffle_train=True, get_test=True)
-    # print(next(iter(train_loader))[0].shape)
-
 
     start_time = time.time()
     # Track memory usage before training
