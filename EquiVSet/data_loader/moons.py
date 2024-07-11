@@ -1,7 +1,8 @@
 import torch
 import numpy as np
 from sklearn import datasets
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, Subset, ConcatDataset
+from sklearn.model_selection import KFold
 
 class Data:
     def __init__(self, params):
@@ -41,6 +42,24 @@ class TwoMoons(Data):
                                     shuffle=False, num_workers=num_workers)
         test_loader = DataLoader(dataset=test_dataset, batch_size=batch_size,
                                     shuffle=False, num_workers=num_workers) if get_test else None
+        return train_loader, val_loader, test_loader
+
+    def get_kfold_loaders(self, batch_size, num_workers, selected_fold, shuffle_train=False, get_test=True):
+        # Combine train and validation sets for k-fold split
+        train_loader, val_loader, test_loader = self.get_loaders(batch_size, num_workers, shuffle_train, get_test)
+        combined_dataset = ConcatDataset([train_loader.dataset, val_loader.dataset])
+        indices = list(range(len(combined_dataset)))
+
+        # KFold cross-validator with a fixed seed for reproducibility
+        kfold = KFold(n_splits=5, shuffle=True, random_state=1)
+        for fold, (train_indices, val_indices) in enumerate(kfold.split(indices)):
+            if fold == selected_fold:
+                train_subset = Subset(combined_dataset, train_indices)
+                val_subset = Subset(combined_dataset, val_indices)
+                train_loader = DataLoader(dataset=train_subset, batch_size=batch_size,
+                                          shuffle=shuffle_train, num_workers=num_workers)
+                val_loader = DataLoader(dataset=val_subset, batch_size=batch_size,
+                                        shuffle=False, num_workers=num_workers)
         return train_loader, val_loader, test_loader
 
 class SetDataset(Dataset):

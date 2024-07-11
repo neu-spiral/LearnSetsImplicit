@@ -70,7 +70,7 @@ class TwoMoons(Data):
         splits = list(kf.split(combined_V))
 
         # Get the indices for the specified fold
-        train_indices, val_indices = splits[fold]
+        train_indices, val_indices = splits[fold-1]
 
         # Create train and validation datasets for the current fold
         train_dataset = SetDataset(combined_V[train_indices], combined_S[train_indices], self.params, is_train=True,

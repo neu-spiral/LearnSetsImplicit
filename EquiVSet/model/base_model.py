@@ -112,22 +112,9 @@ class Base_Model(nn.Module):
 
         optim_energy, optim_var = self.configure_optimizers()
         gradient_clippers = self.configure_gradient_clippers()
-        train_loader, val_loader, test_loader = self.data.get_loaders(
-            self.hparams.batch_size, self.hparams.num_workers,
+        train_loader, val_loader, test_loader = self.data.get_kfold_loaders(
+            self.hparams.batch_size, self.hparams.fold, self.hparams.num_workers,
             shuffle_train=True, get_test=True)
-        combined_dataset = ConcatDataset([train_loader.dataset, val_loader.dataset])
-        indices = list(range(len(combined_dataset)))
-
-        # KFold cross-validator with a fixed seed for reproducibility
-        kfold = KFold(n_splits=5, shuffle=True, random_state=self.hparams.seed)
-        for fold, (train_indices, val_indices) in enumerate(kfold.split(indices)):
-            if fold == self.hparams.fold:
-                train_subset = Subset(combined_dataset, train_indices)
-                val_subset = Subset(combined_dataset, val_indices)
-                train_loader = DataLoader(train_subset, batch_size=self.hparams.batch_size,
-                                          num_workers=self.hparams.num_workers, shuffle=False)
-                val_loader = DataLoader(val_subset, batch_size=self.hparams.batch_size,
-                                        num_workers=self.hparams.num_workers, shuffle=False)
 
 
         best_val_perf = float('-inf')
@@ -148,6 +135,7 @@ class Base_Model(nn.Module):
 
                 for batch_num, batch in enumerate(train_loader):
                     V_set, S_set, neg_S_set = move_to_device(batch, device)
+                    # print(V_set.shape, S_set.shape, neg_S_set.shape)
 
                     if self.hparams.mode != 'diffMF':
                         # optimize variational distribution (the q distribution)

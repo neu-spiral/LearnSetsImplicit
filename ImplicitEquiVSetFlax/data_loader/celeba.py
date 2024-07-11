@@ -86,41 +86,34 @@ class CelebA(Data):
 
     def get_loaders(self, batch_size, num_workers, shuffle_train=False, get_test=True, transform=None):
         train_dataset = SetDataset(self.V_train, self.S_train, self.params, is_train=True, transform=transform)
-        val_dataset = SetDataset(self.V_val, self.S_val, self.params, transform=transform)
-        test_dataset = SetDataset(self.V_test, self.S_test, self.params, transform=transform)
+        val_dataset = SetDataset(self.V_val, self.S_val, self.params, is_train=True, transform=transform)
+        test_dataset = SetDataset(self.V_test, self.S_test, self.params, is_train=True, transform=transform)
 
         train_loader = DataLoader(dataset=train_dataset, batch_size=batch_size,
                                     collate_fn=collate_train, shuffle=shuffle_train, num_workers=num_workers)
         val_loader = DataLoader(dataset=val_dataset, batch_size=batch_size,
-                                    collate_fn=collate_val_and_test, shuffle=False, num_workers=num_workers)
+                                    collate_fn=collate_train, shuffle=False, num_workers=num_workers)
         test_loader = DataLoader(dataset=test_dataset, batch_size=batch_size,
-                                    collate_fn=collate_val_and_test, shuffle=False, num_workers=num_workers) if get_test else None
+                                    collate_fn=collate_train, shuffle=False, num_workers=num_workers) if get_test else None
         return train_loader, val_loader, test_loader
 
-    def get_kfold_loaders(self, batch_size, num_workers, fold, shuffle_train=False, get_test=True, transform=None):
+    def get_kfold_loaders(self, batch_size, num_workers, selected_fold, shuffle_train=False, get_test=True, transform=None):
         # Combine train and validation sets for k-fold split
-        combined_V = np.concatenate((self.V_train, self.V_val), axis=0)
-        combined_S = np.concatenate((self.S_train, self.S_val), axis=0)
-        kf = KFold(n_splits=5, shuffle=True, random_state=1)
-        splits = list(kf.split(combined_V))
-        # Get the indices for the specified fold
-        train_indices, val_indices = splits[fold]
-        # Create train and validation datasets for the current fold
-        train_dataset = SetDataset(combined_V[train_indices], combined_S[train_indices], self.params, is_train=True,
-                                   transform=transform)
-        val_dataset = SetDataset(combined_V[val_indices], combined_S[val_indices], self.params, is_train=True,
-                                 transform=transform)
-        test_dataset = SetDataset(self.V_test, self.S_test, self.params, is_train=True, transform=transform)
-        # Create data loaders
-        train_loader = DataLoader(dataset=train_dataset, batch_size=batch_size,
-                                  shuffle=shuffle_train, num_workers=num_workers,
-                                  collate_fn=numpy_collate)
-        val_loader = DataLoader(dataset=val_dataset, batch_size=batch_size,
-                                shuffle=False, num_workers=num_workers,
-                                collate_fn=numpy_collate)
-        test_loader = DataLoader(dataset=test_dataset, batch_size=batch_size,
-                                 shuffle=False, num_workers=num_workers,
-                                 collate_fn=numpy_collate) if get_test else None
+        train_loader, val_loader, test_loader = self.get_loaders(batch_size, num_workers, shuffle_train, get_test, transform)
+        combined_dataset = ConcatDataset([train_loader.dataset, val_loader.dataset])
+        indices = list(range(len(combined_dataset)))
+
+        # KFold cross-validator with a fixed seed for reproducibility
+        kfold = KFold(n_splits=5, shuffle=True, random_state=1)
+        for fold, (train_indices, val_indices) in enumerate(kfold.split(indices)):
+            if fold == selected_fold:
+                train_subset = Subset(combined_dataset, train_indices)
+                val_subset = Subset(combined_dataset, val_indices)
+                train_loader = DataLoader(dataset=train_subset, batch_size=batch_size,
+                                          collate_fn=collate_train, shuffle=shuffle_train, num_workers=num_workers)
+                val_loader = DataLoader(dataset=val_subset, batch_size=batch_size,
+                                        collate_fn=collate_train, shuffle=False, num_workers=num_workers)
+
         return train_loader, val_loader, test_loader
 
 class SetDataset(Dataset):

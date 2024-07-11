@@ -4,14 +4,16 @@
 dir="EquiVSet"
 
 # Possible values for data_name and mode
-data_names=("gaussian"  "amazon" "celeba") #"moons"
-modes=("diffMF"  "ind" "copula")
+
+data_names=("celeba") #"moons" "gaussian" "amazon" "bindingdb"
+modes=("diffMF" "ind" "copula")
+
 
 # Possible values for amazon_cat
 amazon_cats=("toys" "furniture" "gear" "carseats" "bath" "health" "diaper" "bedding" "safety" "feeding" "apparel" "media")
 
 # Learning rates
-learning_rates=("0.001" "0.0001" "0.00001") #"0.01"
+learning_rates=("0.001" "0.0001" "0.00001")
 
 # Number of repetitions
 folds=5
@@ -28,7 +30,7 @@ for data_name in "${data_names[@]}"; do
           for ((i=1; i<=folds; i++)); do
             fold=$i
             echo "Running $dir/main.py with --data_name=$data_name --amazon_cat=$amazon_cat --mode=$mode --lr=$lr --fold=$fold (Run $i) --num_layers=$num_layers"
-            (cd "$dir" && CUDA_VISIBLE_DEVICES=1 python main.py equivset --train --cuda --data_name="$data_name" --amazon_cat="$amazon_cat" --mode="$mode" --lr="$lr" --fold=$fold --num_layers=$num_layers)
+            (cd "$dir" && CUDA_VISIBLE_DEVICES=2 python main.py equivset --train --cuda --data_name="$data_name" --amazon_cat="$amazon_cat" --mode="$mode" --lr="$lr" --fold=$fold --num_layers=$num_layers)
           done
         done
       done
@@ -40,7 +42,7 @@ for data_name in "${data_names[@]}"; do
         for ((i=1; i<=folds; i++)); do
           fold=$i
           echo "Running $dir/main.py with --data_name=$data_name --mode=$mode --lr=$lr --fold=$fold (Run $i) --num_layers=$num_layers"
-          (cd "$dir" && CUDA_VISIBLE_DEVICES=1 python main.py equivset --train --cuda --data_name="$data_name" --mode="$mode" --lr="$lr" --fold=$fold --num_layers=$num_layers)
+          (cd "$dir" && CUDA_VISIBLE_DEVICES=2 python main.py equivset --train --cuda --data_name="$data_name" --mode="$mode" --lr="$lr" --fold=$fold --num_layers=$num_layers)
         done
       done
     done

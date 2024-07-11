@@ -11,7 +11,10 @@ import numpy as np
 from functools import partial
 from jaxopt import AndersonAcceleration, FixedPointIteration
 from jaxopt.linear_solve import solve_gmres, solve_normal_cg
+from model.acnn import ACNN
+from utils.config import ACNN_CONFIG
 from model.celebaCNN import CelebaCNN
+from model.deepDTA import DeepDTA_Encoder
 from typing import Callable
 from utils.flax_helper import FF, normal_cdf
 from utils.implicit import SigmoidImplicitLayer
@@ -53,6 +56,7 @@ class MFVI(nn.Module):
         matrix_1 = matrix_0 + mask
         return matrix_1, matrix_0, sample_matrix  # F([x]_+i), F([x]_- i)
 
+    # @property
     def define_init_layer(self):
         """
         Returns the initial layer custom to different setups.
@@ -61,6 +65,14 @@ class MFVI(nn.Module):
         data_name = self.params.data_name
         if data_name == 'celeba':
             return CelebaCNN()
+        elif data_name == 'bindingdb':
+            return DeepDTA_Encoder()
+        # elif data_name == 'pdbbind':
+        #     return ACNN(hidden_sizes=ACNN_CONFIG['hidden_sizes'],
+        #                 weight_init_stddevs=ACNN_CONFIG['weight_init_stddevs'],
+        #                 dropouts=ACNN_CONFIG['dropouts'],
+        #                 features_to_use=ACNN_CONFIG['atomic_numbers_considered'],
+        #                 radial=ACNN_CONFIG['radial'])
         return nn.Dense(features=self.dim_feature)
 
     @nn.compact
@@ -69,7 +81,8 @@ class MFVI(nn.Module):
         subset_i, subset_not_i, _ = self.MC_sampling(q, self.params.num_samples, derandomize=self.params.derandomize)
         init_layer = self.define_init_layer()
         ff = FF(self.dim_feature, 500, 1, self.params.num_layers)
-        # print(V.shape)
+        # print(type(V))
+        # print(V)
         # print(init_layer(V).shape)  # this shape should be (1024, 256) instead of (1024, 64, 64, 256)
         fea_1 = init_layer(V).reshape(subset_i.shape[0], 1, -1, self.dim_feature)
         fea_1 = subset_i @ fea_1
@@ -83,17 +96,15 @@ class MFVI(nn.Module):
         # self.params.M = jnp.where(f_max > self.params.M, f_max, self.params.M)
 
         grad = (fea_1 - fea_0).mean(1)
-        # l2_norm = jnp.linalg.norm(grad)
-        nuc_norm = jnp.linalg.norm(grad, ord = 'nuc')
-
-        # if l2_norm > 2/self.params.v_size:
-        #     grad *= 2 / (self.params.v_size * l2_norm)
+        norm = jnp.linalg.norm(grad, ord=self.params.norm)
+        # jax.debug.print("norm: {}", norm)
+        # if norm > self.params.M:
+        #     self.params.M = norm
+        # self.params.M = jnp.where(norm > self.params.M, norm, self.params.M)
         # grad = jnp.where(l2_norm > 2/self.params.v_size, (2 / (self.params.v_size * l2_norm)) * grad, grad)
-        # jax.debug.print("l2_norm is {l2_norm}", l2_norm=l2_norm)
-        # jax.debug.print("f_max is {f_max}", f_max=f_max)
-        # grad *= 2 / (self.params.v_size * l2_norm)
-        grad = 2*grad/(self.params.v_size*nuc_norm)
-        q = jax.nn.sigmoid(grad)
+
+        q = jax.nn.sigmoid((2 / (self.params.v_size * norm)) * grad)
+        # q = jax.nn.sigmoid(grad)
         return q
 
 
@@ -140,52 +151,58 @@ class SetFunction(nn.Module):
                                          verbose=self.params.is_verbose)
         return SigmoidImplicitLayer(mfvi=mfvi, fixed_point_solver=fixed_point_solver)
 
-    def __call__(self, V, S, neg_S, **kwargs):
+    def __call__(self, V, S, neg_S, rec_net=None, **kwargs):
         """"returns cross-entropy loss."""
-        bs, vs = V.shape[:2]
-        if self.params.data_name == 'celeba':
-            bs = int(bs / 8)
-            vs = self.params.v_size
-        q = .5 * jnp.ones((bs, vs))  # ψ_0 <-- 0.5 * vector(1)
-
+        if self.params.mode == 'implicit':
+            # print(V)
+            if self.params.data_name == 'bindingdb':
+                bs = self.params.batch_size
+                vs = self.params.v_size
+            else:
+                bs, vs = V.shape[:2]
+                if self.params.data_name == 'celeba':
+                    bs = int(bs / 8)
+                    vs = self.params.v_size
+            q = .5 * jnp.ones((bs, vs))  # ψ_0 <-- 0.5 * vector(1)
+        else:
+            q = rec_net.get_vardist(V, S.shape[0])
+        # V = jnp.array(V)
+        # print("Shape of V:", jnp.shape(V))
         q = self.fixed_point_layer(q, V)
-        # print(f"q_out = {q}")
-        # assert jnp.all(q >= 0) and np.all(q <= 1), "Some elements of psi are not in [0, 1]!"
 
         loss = self.cross_entropy(q, S, neg_S)
         return loss
 
 
+# noinspection PyAttributeOutsideInit
 class RecNet(nn.Module):  # this is only used for 'ind' or 'copula' modes
-    def __init__(self, params):
-        super(RecNet, self).__init__()
-        self.params = params
-        self.dim_feature = 256
-        num_layers = self.params.num_layers
+    params: dict
+    dim_feature: int = 256
 
+    def setup(self):
         self.init_layer = self.define_init_layer()
-        self.ff = FF(self.dim_feature, 500, 500, num_layers - 1 if num_layers > 0 else 0)
-        self.h_to_mu = nn.Linear(500, 1)
+        self.ff = FF(self.dim_feature, 500, 500, self.params.num_layers - 1 if self.params.num_layers > 0 else 0)
+        self.h_to_mu = nn.Dense(features=1)
         if self.params.mode == 'copula':
-            self.h_to_std = nn.Linear(500, 1)
-            self.h_to_U = nn.ModuleList([nn.Linear(500, 1) for i in range(self.params.rank)])
+            self.h_to_std = nn.Dense(features=1)
+            self.h_to_U = nn.ModuleList([nn.Dense(features=1) for _ in range(self.params.rank)])
 
     def define_init_layer(self):
         data_name = self.params.data_name
-        if data_name == 'moons':
-            return nn.Linear(2, self.dim_feature)
+        if data_name == 'celeba':
+            return CelebaCNN()
         elif data_name == 'gaussian':
-            return nn.Linear(2, self.dim_feature)
+            return nn.Dense(features=self.dim_feature)
         elif data_name == 'amazon':
-            return nn.Linear(768, self.dim_feature)
-        elif data_name == 'celeba':
-            return celebaCNN()
-        elif data_name == 'pdbbind':
-            return ACNN(hidden_sizes=ACNN_CONFIG['hidden_sizes'],
-                        weight_init_stddevs=ACNN_CONFIG['weight_init_stddevs'],
-                        dropouts=ACNN_CONFIG['dropouts'],
-                        features_to_use=ACNN_CONFIG['atomic_numbers_considered'],
-                        radial=ACNN_CONFIG['radial'])
+            return nn.Dense(features=self.dim_feature)
+        elif data_name == 'moons':
+            return nn.Dense(features=self.dim_feature)
+        # elif data_name == 'pdbbind':
+        #     return ACNN(hidden_sizes=ACNN_CONFIG['hidden_sizes'],
+        #                 weight_init_stddevs=ACNN_CONFIG['weight_init_stddevs'],
+        #                 dropouts=ACNN_CONFIG['dropouts'],
+        #                 features_to_use=ACNN_CONFIG['atomic_numbers_considered'],
+        #                 radial=ACNN_CONFIG['radial'])
         elif data_name == 'bindingdb':
             return DeepDTA_Encoder()
         else:
@@ -205,15 +222,15 @@ class RecNet(nn.Module):  # this is only used for 'ind' or 'copula' modes
 
         """
         fea = self.init_layer(V).reshape(bs, -1, self.dim_feature)
-        h = torch.relu(self.ff(fea))
-        ber = torch.sigmoid(self.h_to_mu(h)).squeeze(-1)  # [batch_size, v_size]
+        h = nn.relu(self.ff(fea))
+        ber = jax.nn.sigmoid(self.h_to_mu(h)).squeeze(-1)  # [batch_size, v_size]
 
         if self.params.mode == 'copula':
-            std = F.softplus(self.h_to_std(h)).squeeze(-1)  # [batch_size, v_size]
+            std = nn.softplus(self.h_to_std(h)).squeeze(-1)  # [batch_size, v_size]
             rs = []
             for i in range(self.params.rank):
-                rs.append(torch.tanh(self.h_to_U[i](h)))
-            u_perturbation = torch.cat(rs, -1)  # [batch_size, v_size, rank]
+                rs.append(nn.tanh(self.h_to_U[i](h)))
+            u_perturbation = jnp.concatenateat(rs, axis=-1)  # [batch_size, v_size, rank]
 
             return ber, std, u_perturbation
         return ber, None, None
@@ -234,30 +251,32 @@ class RecNet(nn.Module):  # this is only used for 'ind' or 'copula' modes
         bs, vs = ber.shape
 
         if self.params.mode == 'copula':
-            eps = torch.randn((bs, M, vs)).to(ber.device)
-            eps_corr = torch.randn((bs, M, self.params.rank, 1)).to(ber.device)
-            g = eps * std.unsqueeze(1) + torch.matmul(u_pert.unsqueeze(1), eps_corr).squeeze(-1)
+            eps = jax.random.normal(jax.random.PRNGKey(self.params.seed), (bs, M, vs))
+            eps_corr = jax.random.normal(jax.random.PRNGKey(self.params.seed), (bs, M, self.params.rank, 1))
+            g = eps * jnp.expand_dims(std, axis=1) + jnp.matmul(jnp.expand_dims(u_pert, axis=1), eps_corr).squeeze(-1)
             u = normal_cdf(g, 0, 1)
         else:
             # mode == 'ind'
-            u = torch.rand((bs, M, vs)).to(ber.device)
+            u = jax.random.uniform(jax.random.PRNGKey(self.params.seed), (bs, M, vs))
 
-        ber = ber.unsqueeze(1)
-        l = torch.log(ber + 1e-12) - torch.log(1 - ber + 1e-12) + \
-            torch.log(u + 1e-12) - torch.log(1 - u + 1e-12)
+        ber = jnp.expand_dims(ber, axis=1)
+        l = jnp.log(ber + 1e-12) - jnp.log(1 - ber + 1e-12) + jnp.log(u + 1e-12) - jnp.log(1 - u + 1e-12)
 
-        prob = torch.sigmoid(l / self.params.tau)
-        r = torch.bernoulli(prob)  # binary vector
-        s = prob + (r - prob).detach()  # straight through estimator
+        prob = jax.nn.sigmoid(l / self.params.tau)
+        r = jax.random.bernoulli(jax.random.PRNGKey(self.params.seed), prob)  # binary vector
+        s = prob + (r - prob)  # straight through estimator
         return s
 
     def cal_elbo(self, V, sample_mat, set_func, q):
-        f_mt = set_func.F_S(V, sample_mat).squeeze(-1).mean(-1)
-        entropy = - torch.sum(q * torch.log(q + 1e-12) + (1 - q) * torch.log(1 - q + 1e-12), dim=-1)
+        # f_mt = set_func.F_S(V, sample_mat).squeeze(-1).mean(-1)
+        fea = self.init_layer(V).reshape(sample_mat.shape[0], -1, self.dim_feature)
+        fea = sample_mat @ fea
+        fea = self.ff(fea).squeeze(-1).mean(-1)
+        entropy = - jnp.sum(q * jnp.log(q + 1e-12) + (1 - q) * jnp.log(1 - q + 1e-12), axis=-1)
         elbo = f_mt + entropy
         return elbo.mean()
 
-    def forward(self, V, set_func, bs):  # return negative ELBO
+    def __call__(self, V, set_func, bs):  # return negative ELBO
         ber, std, u_perturbation = self.encode(V, bs)
         sample_mat = self.MC_sampling(ber, std, u_perturbation, self.params.num_samples)
         elbo = self.cal_elbo(V, sample_mat, set_func, ber)
@@ -265,8 +284,8 @@ class RecNet(nn.Module):  # this is only used for 'ind' or 'copula' modes
 
     def get_vardist(self, V, bs):
         fea = self.init_layer(V).reshape(bs, -1, self.dim_feature)
-        h = torch.relu(self.ff(fea))
-        ber = torch.sigmoid(self.h_to_mu(h)).squeeze(-1)
+        h = nn.relu(self.ff(fea))
+        ber = jax.nn.sigmoid(self.h_to_mu(h)).squeeze(-1)
         return ber
 
 

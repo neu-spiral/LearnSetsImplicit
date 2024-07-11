@@ -8,7 +8,8 @@ import pandas as pd
 from PIL import Image
 from tqdm import tqdm
 from torchvision import transforms
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, Subset, ConcatDataset
+from sklearn.model_selection import KFold
 
 image_size = 64
 img_transform = transforms.Compose([
@@ -91,9 +92,29 @@ class CelebA(Data):
         train_loader = DataLoader(dataset=train_dataset, batch_size=batch_size,
                                     collate_fn=collate_train, shuffle=shuffle_train, num_workers=num_workers)
         val_loader = DataLoader(dataset=val_dataset, batch_size=batch_size,
-                                    collate_fn=collate_val_and_test, shuffle=False, num_workers=num_workers)
+                                    collate_fn=collate_train, shuffle=False, num_workers=num_workers)
         test_loader = DataLoader(dataset=test_dataset, batch_size=batch_size,
-                                    collate_fn=collate_val_and_test, shuffle=False, num_workers=num_workers) if get_test else None
+                                    collate_fn=collate_train, shuffle=False, num_workers=num_workers) if get_test else None
+        return train_loader, val_loader, test_loader
+
+    def get_kfold_loaders(self, batch_size, num_workers, selected_fold, shuffle_train=False, get_test=True):
+        train_loader, val_loader, test_loader = self.get_loaders(
+            batch_size, num_workers,
+            shuffle_train, get_test)
+        combined_dataset = ConcatDataset([train_loader.dataset, val_loader.dataset])
+        indices = list(range(len(combined_dataset)))
+
+        # KFold cross-validator with a fixed seed for reproducibility
+        kfold = KFold(n_splits=5, shuffle=True, random_state=1)
+        for fold, (train_indices, val_indices) in enumerate(kfold.split(indices)):
+            if fold == selected_fold:
+                train_subset = Subset(combined_dataset, train_indices)
+                val_subset = Subset(combined_dataset, val_indices)
+                print(f"Train subset size: {len(train_subset)}, Validation subset size: {len(val_subset)}")
+                train_loader = DataLoader(dataset=train_subset, batch_size=batch_size,
+                                          collate_fn=collate_train, shuffle=shuffle_train, num_workers=num_workers)
+                val_loader = DataLoader(dataset=val_subset, batch_size=batch_size,
+                                        collate_fn=collate_train, shuffle=False, num_workers=num_workers)
         return train_loader, val_loader, test_loader
 
 class SetDataset(Dataset):
@@ -183,7 +204,7 @@ def collate_train(data):
     return V, S, neg_S
 
 def collate_val_and_test(data):
-    V, S = map(list, zip(*data))
+    V, S, _ = map(list, zip(*data))
     bs = len(V)
 
     V = torch.cat(V, dim=0)

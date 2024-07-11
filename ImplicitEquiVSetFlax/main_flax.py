@@ -142,10 +142,11 @@ def parse_arguments():
                         help='Ridge regularization in Anderson updates [%(default)d]')
     parser.add_argument('--anderson_hist_size', type=int, default=10,
                         help='Size of history in Anderson updates [%(default)d]')
-    parser.add_argument('--lipschitz', type=float, default=500,
-                        help='Lipschitz of the NN')
-    parser.add_argument('--M', type=float, default=2,
-                        help='The upper bound of the NN output')
+    parser.add_argument('--M', type=int, default=2,
+                        help='Scaling factor [%(default)d]')
+    parser.add_argument('--norm', type=str, default='nuc', choices=['fro', 'nuc'],
+                        help='Norm choice to be used in scaling [%(default)d]')
+
     args = parser.parse_args()
     return args
 
@@ -174,18 +175,29 @@ if __name__ == "__main__":
 
 
     def tensor_to_numpy(x):
-        x = np.array(x, dtype=np.float32)
-        return x
+        if isinstance(x, torch.FloatTensor):
+            # print(x.type())
+            return np.array(x, dtype=float)
+        else:
+            x = np.array(x, dtype=str)
+            # print(type(x))
+            return x
 
+    if params.data_name != 'bindingdb':
+        # train_loader, val_loader, test_loader = data.get_loaders(batch_size, num_workers, transform=tensor_to_numpy,
+        #                                                          shuffle_train=True, get_test=True)
+        train_loader, val_loader, test_loader = data.get_kfold_loaders(batch_size, num_workers, params.fold)
+    else:
+        train_loader, val_loader, test_loader = data.get_loaders(batch_size, num_workers, transform=tensor_to_numpy,
+                                                                 shuffle_train=True, get_test=True)
+    # print(next(iter(train_loader))[0].shape)
 
-    # train_loader, val_loader, test_loader = data.get_loaders(batch_size, num_workers, transform=tensor_to_numpy)
-    train_loader, val_loader, test_loader = data.get_kfold_loaders(batch_size, num_workers, fold=params.fold)
 
     start_time = time.time()
     # Track memory usage before training
     process = psutil.Process(os.getpid())
     memory_before = process.memory_info().rss
-
+    # print(next(iter(train_loader)))
     trainer = EquiVSetTrainer(params=params,
                               dim_feature=256,
                               optimizer_hparams={'lr': params.lr},
@@ -216,16 +228,16 @@ if __name__ == "__main__":
         'amazon_cat': params.amazon_cat,
         'mode': params.mode,
         'lr': params.lr,
-        'best_train_loss': metrics["best_train/loss"],
-        'best_train_jaccard': metrics["best_train/jaccard"],
-        'best_val_jaccard': metrics["best_val/jaccard"],
-        'best_test_jaccard': metrics["best_test/jaccard"],
-        'epoch_time': metrics["best_epoch_time"],
-        'time': elapsed_time,
-        'memory_used_MB': memory_used / (1024 ** 2),
-        'train_loss': metrics["train/loss"],
-        'train_jaccard': metrics["train/jaccard"],
-        'val_jaccard': metrics["val/jaccard"],
+        'best_val_jaccard': f"{metrics['best_val/jaccard']:.2f}",
+        'best_test_jaccard': f"{metrics['best_test/jaccard']:.2f}",
+        'epoch_time': f"{metrics['best_epoch_time']:.2f}",
+        'time': f"{elapsed_time:.2f}",
+        'memory_used_MB': f"{memory_used / (1024 ** 2):.2f}",
+        'best_train_loss': f"{metrics['best_train/loss']:.2f}",
+        'best_train_jaccard': f"{metrics['best_train/jaccard']:.2f}",
+        'train_loss': f"{metrics['train/loss']}",
+        # 'train_jaccard': f"{metrics['train/jaccard']:.2f}",
+        # 'val_jaccard': f"{metrics['val/jaccard']:.2f}",
     }
     # Convert dictionary to DataFrame
     df_metrics = pd.DataFrame([metrics_dict])

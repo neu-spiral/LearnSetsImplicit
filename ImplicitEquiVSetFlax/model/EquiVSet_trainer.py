@@ -93,10 +93,14 @@ class EquiVSetTrainer(TrainerModule):
 
         def inference(state, V):
             # V, S, neg_S = batch
-            bs, vs = V.shape[:2]
-            if self.model_hparams['params'].data_name == 'celeba':
-                bs = int(bs / 8)
+            if self.model_hparams['params'].data_name == 'bindingdb':
+                bs = self.model_hparams['params'].batch_size
                 vs = self.model_hparams['params'].v_size
+            else:
+                bs, vs = V.shape[:2]
+                if self.model_hparams['params'].data_name == 'celeba':
+                    bs = int(bs / 8)
+                    vs = self.model_hparams['params'].v_size
             q = .5 * jnp.ones((bs, vs))
             # print(state.params)
 

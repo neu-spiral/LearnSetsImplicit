@@ -349,7 +349,7 @@ class TrainerModule(nn.Module):  # why did they define it without nn.Module?
         best_eval_metrics = None
         for epoch_idx in self.tracker(range(1, num_epochs + 1), desc='Epochs'):
             train_loss = self.train_epoch(train_loader)
-            metric_dict["train/loss"].append(train_loss["train/loss"])
+            metric_dict["train/loss"].append(round(train_loss["train/loss"], 2))
             self.logger.log_metrics(train_loss, step=epoch_idx)
             train_metrics = self.eval_model(train_loader, log_prefix='train/')
             append_dict(metric_dict, train_metrics)

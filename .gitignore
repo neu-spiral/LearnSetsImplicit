@@ -47,3 +47,5 @@ Thumbs.db
 history/
 EquiVSet/root
 ImplicitEquiVSetFlax/root
+*/__pycache__/
+

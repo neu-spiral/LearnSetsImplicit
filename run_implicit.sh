@@ -4,19 +4,20 @@
 dir="ImplicitEquiVSetFlax"
 
 # Possible values for data_name
-data_names=("moons" "gaussian" "amazon" "celeba")
+data_names=("celeba") # "amazon") #"moons" "gaussian" )
 
 # Possible values for amazon_cat
 amazon_cats=("apparel" "bedding" "carseats" "diaper" "feeding" "gear" "media" "bath" "health" "toys" "furniture" "safety" )
 
 # Learning rates
-learning_rates=("0.001" "0.0001" "0.00001") #"0.01"
+learning_rates=("0.01" "0.001" "0.0001" "0.00001") #
 
 # Number of repetitions
 folds=5
 fwd_tol=1e-6
 fwd_maxiter=20
 num_layers=3
+
 
 # Loop over each data_name
 for data_name in "${data_names[@]}"; do
@@ -27,7 +28,7 @@ for data_name in "${data_names[@]}"; do
         for ((i=1; i<=folds; i++)); do
           fold=$i
           echo "Running $dir/main_flax.py with --data_name=$data_name --amazon_cat=$amazon_cat --lr=$lr --fold=$fold (Run $i) --fwd_tol=$fwd_tol --fwd_maxiter=$fwd_maxiter --num_layers=$num_layers"
-          (cd "$dir" && CUDA_VISIBLE_DEVICES=1 python main_flax.py --data_name="$data_name" --amazon_cat="$amazon_cat" --lr="$lr" --fold=$fold --fwd_tol=$fwd_tol --fwd_maxiter=$fwd_maxiter --num_layers=$num_layers)
+          (cd "$dir" && CUDA_VISIBLE_DEVICES=0 python main_flax.py --data_name="$data_name" --amazon_cat="$amazon_cat" --lr="$lr" --fold=$fold --fwd_tol=$fwd_tol --fwd_maxiter=$fwd_maxiter --num_layers=$num_layers)
         done
       done
     done
@@ -36,7 +37,7 @@ for data_name in "${data_names[@]}"; do
       for ((i=1; i<=folds; i++)); do
         fold=$i
         echo "Running $dir/main_flax.py with --data_name=$data_name --lr=$lr --fold=$fold (Run $i) --fwd_tol=$fwd_tol --fwd_maxiter=$fwd_maxiter --num_layers=$num_layers"
-        (cd "$dir" && CUDA_VISIBLE_DEVICES=1 python main_flax.py --data_name="$data_name" --lr="$lr" --fold=$fold --fwd_tol=$fwd_tol --fwd_maxiter=$fwd_maxiter --num_layers=$num_layers)
+        (cd "$dir" && CUDA_VISIBLE_DEVICES=0 python main_flax.py --data_name="$data_name" --lr="$lr" --fold=$fold --fwd_tol=$fwd_tol --fwd_maxiter=$fwd_maxiter --num_layers=$num_layers)
       done
     done
   fi
