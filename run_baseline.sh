@@ -6,7 +6,7 @@ dir="EquiVSet"
 # Possible values for data_name and mode
 
 data_names=("celeba") #"moons" "gaussian" "amazon" "bindingdb"
-modes=("diffMF" "ind" "copula")
+modes=("copula") #"diffMF" "ind" 
 
 
 
