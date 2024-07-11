@@ -11,6 +11,7 @@ modes=("diffMF" "ind" "copula")
 
 
 
+
 # Possible values for amazon_cat
 amazon_cats=("toys" "furniture" "gear" "carseats" "bath" "health" "diaper" "bedding" "safety" "feeding" "apparel" "media")
 
