@@ -8,8 +8,8 @@ from tdc.multi_pred import DTI
 from multiprocessing import Pool
 from rdkit.DataStructs import FingerprintSimilarity
 from sklearn.cluster import AffinityPropagation
-
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Subset, Dataset, DataLoader, ConcatDataset
+from sklearn.model_selection import KFold
 
 acid_list = ['H', 'M', 'C', 'P', 'L', 'A', 'R', 'F', 'D', 'T', 'K', 'E', 'S', 'V', 'G', 'Y', 'N', 'W', 'I', 'Q']
 CHARPROTLEN  = len(acid_list)
@@ -89,6 +89,7 @@ class SetBindingDB(object):
 
     def get_kfold_loaders(self, batch_size, num_workers, selected_fold, shuffle_train=False, get_test=True,
                           transform=None):
+        num_workers = 0
         # Combine train and validation sets for k-fold split
         train_loader, val_loader, test_loader = self.get_loaders(batch_size, num_workers, shuffle_train, get_test,
                                                                  transform)

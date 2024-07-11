@@ -16,7 +16,7 @@ learning_rates=("0.01" "0.001" "0.0001" "0.00001") #
 folds=5
 fwd_tol=1e-6
 fwd_maxiter=20
-num_layers=3
+num_layers=2
 
 
 # Loop over each data_name
