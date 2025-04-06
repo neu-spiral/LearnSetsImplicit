@@ -206,8 +206,7 @@ Distributed under the project_license. See `LICENSE.txt` for more information.
 <!-- CONTACT -->
 ## Contact
 
-Your Name - [@twitter_handle](https://twitter.com/twitter_handle) - email@email_client.com
-
+Your Name - [@twitter_handle](https://twitter.com/twitter_handle) - gozcan@ece.neu.edu
 Project Link: [https://github.com/neu-spiral/LearnSetsImplicit](https://github.com/neu-spiral/LearnSetsImplicit)
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
@@ -217,8 +216,7 @@ Project Link: [https://github.com/neu-spiral/LearnSetsImplicit](https://github.c
 <!-- ACKNOWLEDGMENTS -->
 ## Acknowledgments
 
-* We gratefully acknowledge support from the National Sci-
-ence Foundation (NSF-grant 1750539).
+* We gratefully acknowledge support from the National Science Foundation (NSF-grant 1750539).
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
