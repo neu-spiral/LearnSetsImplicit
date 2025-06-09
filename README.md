@@ -58,7 +58,7 @@ To run our proposed method, use:
 bash run_implicit.sh
 ```
 
-This will launch the training pipeline for the proposed model, including any implicit or learned kernel components as described in the paper.
+This will launch the training pipeline for the proposed model as described in the paper.
 
 ---
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
