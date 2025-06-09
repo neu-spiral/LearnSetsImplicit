@@ -34,7 +34,33 @@ This is an example of how to list things you need to use the software and how to
    git remote set-url origin neu-spiral/LearnSetsImplicit
    git remote -v # confirm the changes
    ```
+6. Running Experiments
 
+This project includes scripts to run both the **baseline models** and the **proposed method**.
+
+### Baseline Models
+
+To run the baseline experiments, execute:
+
+```
+bash run_baseline.sh
+```
+
+This script launches training and evaluation for all baseline methods. Make sure any dataset paths and hyperparameters are correctly configured inside the script.
+
+---
+
+### Proposed Method
+
+To run our proposed method, use:
+
+```
+bash run_implicit.sh
+```
+
+This will launch the training pipeline for the proposed model, including any implicit or learned kernel components as described in the paper.
+
+---
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 
